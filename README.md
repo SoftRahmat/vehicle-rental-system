@@ -103,8 +103,11 @@ A modular, scalable backend API for managing vehicle rentals, built with **Expre
 
 ### 1️⃣ Clone the Repository
 
+```
 git clone https://github.com/SoftRahmat/vehicle-rental-system.git
 cd vehicle-rental-system
+
+```
 
 ### 2️⃣ Install Dependencies
 
