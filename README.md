@@ -118,7 +118,7 @@ npm install
 Create a .env file:
 ```
 PORT=5000
-DATABASE_URL=your DB connetion URL
+DATABASE_URL=your_db_connection_url
 JWT_SECRET=your_strong_secret_key
 
 ```
