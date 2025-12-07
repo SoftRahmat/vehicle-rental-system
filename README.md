@@ -3,8 +3,7 @@
 A modular, scalable backend API for managing vehicle rentals, built with **Express.js**, **TypeScript**, **PostgreSQL**, and **JWT Authentication**.
 
 **Live API URL:**  
-> https://your-production-api-url.com  
-*(Replace with your deployed server URL)*
+> https://express-project-iota.vercel.app/
 
 ## 🌟 Features
 
