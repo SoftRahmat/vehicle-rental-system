@@ -60,6 +60,7 @@ A modular, scalable backend API for managing vehicle rentals, built with **Expre
 
 ## 📁 Project Structure
 
+```
 ├─ src/
 │  ├─ config/
 │  │  ├─ db.ts
@@ -95,8 +96,9 @@ A modular, scalable backend API for managing vehicle rentals, built with **Expre
 ├─ package-lock.json
 ├─ package.json
 ├─ README.md
-└─ tsconfig.json
+├─ tsconfig.json
 └─ vercel.json
+```
 
 ## 🚀 Setup & Installation
 
@@ -156,8 +158,8 @@ CREATE TABLE bookings (...);
 
 ### 🧩 Future Enhancements
 
-# Email notifications
-# Payment integration
-# Vehicle image uploads
-# Admin dashboard UI
-# Cron job automation
+- Email notifications
+- Payment integration
+- Vehicle image uploads
+- Admin dashboard UI
+- Cron job automation

@@ -5,14 +5,21 @@ import { userRouter } from "./modules/user/user.routes";
 import { vehicleRouter } from "./modules/vehicle/vehicle.routes";
 import { bookingRouter } from "./modules/booking/booking.routes";
 
-
 const app = express();
 // parser
 app.use(express.json());
-// app.use(express.urlencoded());
 
 // initializing DB
 initDB();
+
+// 👉 Root route (default welcome message)
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to the Vehicle Rental System API 🚗",
+    docs: "/api/v1",
+  });
+});
 
 //auth router
 app.use("/api/v1/auth", authRouter);
