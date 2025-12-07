@@ -116,11 +116,12 @@ npm install
 ### 3️⃣ Environment Variables
 
 Create a .env file:
-
+```
 PORT=5000
 DATABASE_URL=your DB connetion URL
 JWT_SECRET=your_strong_secret_key
 
+```
 ### 4️⃣ Initialize Database
 
 npm run dev
