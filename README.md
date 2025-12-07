@@ -129,7 +129,7 @@ npm run dev
 
 npm run dev
 
-## 🧪 Database Initialization
+## 🗄️ Database Initialization
 `src/config/db.ts` provides `initDB()` to create required tables (`users`, `vehicles`, `bookings`). On server start we call `initDB()` in `app.ts`.
 
 If running migrations manually, use:
