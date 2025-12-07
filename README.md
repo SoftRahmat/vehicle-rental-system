@@ -60,44 +60,104 @@ A modular, scalable backend API for managing vehicle rentals, built with **Expre
 
 ## 📁 Project Structure
 
-
+├─ src/
+│  ├─ config/
+│  │  ├─ db.ts
+│  │  └─ index.ts
+│  ├─ middleware/
+│  │  └─ auth.ts
+│  ├─ modules/
+│  │  ├─ auth/
+│  │  │  ├─ auth.controller.ts
+│  │  │  ├─ auth.routes.ts
+│  │  │  └─ auth.service.ts
+│  │  ├─ booking/
+│  │  │  ├─ booking.controller.ts
+│  │  │  ├─ booking.routes.ts
+│  │  │  └─ booking.service.ts
+│  │  ├─ user/
+│  │  │  ├─ user.controller.ts
+│  │  │  ├─ user.routes.ts
+│  │  │  └─ user.service.ts
+│  │  └─ vehicle/
+│  │     ├─ vehicle.controller.ts
+│  │     ├─ vehicle.routes.ts
+│  │     └─ vehicle.service.ts
+│  ├─ types/
+│  │  └─ express/
+│  │     └─ index.d.ts
+│  ├─ utils/
+│  │  └─ asyncHandler.ts
+│  ├─ app.ts
+│  └─ server.ts
+├─ .env
+├─ .gitignore
+├─ package-lock.json
+├─ package.json
+├─ README.md
+└─ tsconfig.json
+└─ vercel.json
 
 ## 🚀 Setup & Installation
 
 ### 1️⃣ Clone the Repository
 
-```bash
 git clone https://github.com/SoftRahmat/vehicle-rental-system.git
 cd vehicle-rental-system
 
-2️⃣ Install Dependencies
+### 2️⃣ Install Dependencies
 
 npm install
 
-3️⃣ Environment Variables
+### 3️⃣ Environment Variables
 
 Create a .env file:
 
 PORT=5000
-DATABASE_URL=postgres://username:password@localhost:5432/vehiclerental
+DATABASE_URL=your DB connetion URL
 JWT_SECRET=your_strong_secret_key
 
-4️⃣ Initialize Database
+### 4️⃣ Initialize Database
 
 npm run dev
 
-5️⃣ Start Development Server
+### 5️⃣ Start Development Server
 
 npm run dev
 
-🧩 Future Enhancements
+## 🧪 Database Initialization
+`src/config/db.ts` provides `initDB()` to create required tables (`users`, `vehicles`, `bookings`). On server start we call `initDB()` in `app.ts`.
 
-Email notifications
+If running migrations manually, use:
 
-Payment integration
+```sql
+CREATE TABLE users (...);
+CREATE TABLE vehicles (...);
+CREATE TABLE bookings (...);
+```
 
-Vehicle image uploads
+---
 
-Admin dashboard UI
+## 📦 Recommended Deployment Workflow
 
-Cron job automation
+1. Push to GitHub.
+2. On Vercel, import the repo. For Option A, Vercel will build serverless functions automatically.
+3. Set Environment Variables in the Vercel dashboard.
+4. Trigger deploy.
+
+---
+
+## 🔐 Security & Production Tips
+
+- Use a strong `JWT_SECRET` and rotate periodically.
+- Use SSL/TLS for DB connections and API.
+- Move sensitive credentials to Vercel Environment Variables (never commit `.env`).
+- Add rate-limiting and request validation (zod) for public endpoints.
+
+### 🧩 Future Enhancements
+
+# Email notifications
+# Payment integration
+# Vehicle image uploads
+# Admin dashboard UI
+# Cron job automation
