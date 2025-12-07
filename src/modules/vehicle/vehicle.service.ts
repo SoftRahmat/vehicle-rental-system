@@ -4,7 +4,7 @@ const ALLOWED_VEHICLE_TYPES = ["car", "bike", "van", "SUV"] as const;
 type VehicleType = (typeof ALLOWED_VEHICLE_TYPES)[number];
 
 /**
- * Vehicle shape (matching API_REFERENCE.md)
+ * Vehicle shape
  */
 export type Vehicle = {
   id: number;
@@ -198,7 +198,7 @@ const deleteVehicle = async (vehicleId: number): Promise<void> => {
       throw e;
     }
 
-    // check active bookings (bookings table per API_REFERENCE)
+    // check active bookings
     const bookingRes = await pool.query(
       `SELECT count(*) AS cnt FROM bookings WHERE vehicle_id = $1 AND status = 'active'`,
       [vehicleId]
@@ -212,9 +212,15 @@ const deleteVehicle = async (vehicleId: number): Promise<void> => {
 
     await pool.query(`DELETE FROM vehicles WHERE id = $1`, [vehicleId]);
   } catch (err: any) {
+    // If this is an expected app error (we set .status earlier), re-throw it unmodified
+    if (err && typeof err.status === "number") {
+      throw err;
+    }
+
+    // Otherwise wrap unknown errors so the caller receives a 500
     const e: any = new Error("Failed to delete vehicle");
-    e.status = err?.status ?? 500;
-    e.errors = err?.message;
+    e.status = 500;
+    e.errors = err?.message ?? String(err);
     throw e;
   }
 };
