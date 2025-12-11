@@ -12,7 +12,7 @@ const app = express();
 const WHITELIST = [
   "http://localhost:3000",
   "http://localhost:3001",
-  "https://express-project-iota.vercel.app", // <-- FIXED: removed trailing slash
+  "https://express-project-iota.vercel.app", // CHANGE WITH YOUR PROD BE URL
 ];
 
 // Core CORS options
@@ -30,15 +30,11 @@ const corsOptions = {
 // Apply CORS to all requests
 app.use(cors(corsOptions));
 
-// Global preflight middleware (safe; does NOT use path-to-regexp)
+// Global preflight middleware
 app.use((req, res, next) => {
   if (req.method !== "OPTIONS") return next();
 
   const origin = req.headers.origin as string | undefined;
-
-  // Debug log (remove in prod)
-  // eslint-disable-next-line no-console
-  console.log("[preflight] OPTIONS", req.originalUrl, "Origin:", origin);
 
   if (!origin) {
     // allow tools like curl / server-to-server (no Origin header)
