@@ -120,6 +120,7 @@ Create a .env file:
 PORT=5000
 DATABASE_URL=your_db_connection_url
 JWT_SECRET=your_strong_secret_key
+FRONTEND_URL=https://your-angular-app.example.com
 
 ```
 ### 4️⃣ Initialize Database

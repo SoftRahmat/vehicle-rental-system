@@ -5,6 +5,8 @@ import { userRouter } from "./modules/user/user.routes";
 import { vehicleRouter } from "./modules/vehicle/vehicle.routes";
 import { bookingRouter } from "./modules/booking/booking.routes";
 import cors from "cors";
+import type { NextFunction, Request, Response } from "express";
+import config from "./config";
 
 const app = express();
 
@@ -12,7 +14,9 @@ const app = express();
 const WHITELIST = [
   "http://localhost:3000",
   "http://localhost:3001",
+  "http://localhost:4200",
   "https://express-project-iota.vercel.app", // CHANGE WITH YOUR PROD BE URL
+  ...(config.frontendUrl ? [config.frontendUrl] : []),
 ];
 
 // Core CORS options
@@ -83,6 +87,16 @@ app.use("/api/v1/vehicles", vehicleRouter);
 
 // booking router
 app.use("/api/v1/bookings", bookingRouter);
+
+// Keep API errors in one predictable shape for web and mobile clients.
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = typeof err?.status === "number" ? err.status : 500;
+  res.status(status).json({
+    success: false,
+    message: err?.message ?? "Internal server error",
+    ...(err?.errors ? { errors: err.errors } : {}),
+  });
+});
 
 app.use((req, res) => {
   res.status(404).json({

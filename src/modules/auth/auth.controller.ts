@@ -6,14 +6,15 @@ import { authService } from "./auth.service";
  * Signup controller
  */
 const signup = asyncHandler(async (req: Request, res: Response) => {
-  const { name, email, password, phone, role } = req.body;
+  const { name, email, password, phone } = req.body;
 
   const created = await authService.signup({
     name,
     email,
     password,
     phone,
-    role,
+    // Public signup is customer-only. Admin roles are managed by an existing admin.
+    role: "customer",
   });
 
   res.status(201).json({
