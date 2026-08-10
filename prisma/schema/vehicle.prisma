@@ -1,0 +1,24 @@
+/// The positive daily-rate check constraint is preserved in the SQL migration.
+model Vehicle {
+  id                 Int       @id @default(autoincrement())
+  vehicleName        String    @map("vehicle_name") @db.VarChar(200)
+  type               String    @db.VarChar(50)
+  registrationNumber String    @unique @map("registration_number") @db.VarChar(100)
+  dailyRentPrice     Decimal   @map("daily_rent_price") @db.Decimal(10, 2)
+  availabilityStatus String    @default("available") @map("availability_status") @db.VarChar(50)
+  createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime? @default(now()) @map("updated_at") @db.Timestamp(6)
+  imageUrl           String?   @map("image_url")
+  seats              Int?
+  transmission       String?   @db.VarChar(40)
+  fuelType           String?   @map("fuel_type") @db.VarChar(40)
+  location           String?   @default("Downtown Hub") @db.VarChar(120)
+  rating             Decimal?  @default(5.0) @db.Decimal(2, 1)
+  description        String?
+  bookings           Booking[]
+
+  @@index([availabilityStatus], map: "idx_vehicles_availability")
+  @@index([createdAt(sort: Desc)], map: "idx_vehicles_created_at")
+  @@index([type], map: "idx_vehicles_type")
+  @@map("vehicles")
+}

@@ -1,5 +1,4 @@
 import express from "express";
-import initDB from "./config/db";
 import { authRouter } from "./modules/auth/auth.routes";
 import { userRouter } from "./modules/user/user.routes";
 import { vehicleRouter } from "./modules/vehicle/vehicle.routes";
@@ -8,6 +7,9 @@ import cors from "cors";
 import type { NextFunction, Request, Response } from "express";
 import config from "./config";
 import { adminRouter } from "./modules/admin/admin.routes";
+import { paymentController } from "./modules/payment/payment.controller";
+import { paymentRouter } from "./modules/payment/payment.routes";
+import { supportRouter } from "./modules/support/support.routes";
 
 const app = express();
 
@@ -37,6 +39,13 @@ const corsOptions = {
 
 // Apply CORS to all requests
 app.use(cors(corsOptions));
+
+// Stripe requires the untouched request body for webhook signature verification.
+app.post(
+  "/api/v1/payments/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  paymentController.stripeWebhook,
+);
 
 // Global preflight middleware
 app.use((req, res, next) => {
@@ -74,9 +83,6 @@ app.use((req, res, next) => {
 // parser
 app.use(express.json());
 
-// initializing DB
-initDB();
-
 // 👉 Root route
 app.get("/", (req, res) => {
   res.status(200).json({
@@ -100,6 +106,8 @@ app.use("/api/v1/bookings", bookingRouter);
 
 // Paginated administration endpoints.
 app.use("/api/v1/admin", adminRouter);
+app.use("/api/v1/payments", paymentRouter);
+app.use("/api/v1/support", supportRouter);
 
 // Keep API errors in one predictable shape for web and mobile clients.
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

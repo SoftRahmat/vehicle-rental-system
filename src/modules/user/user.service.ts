@@ -1,151 +1,114 @@
-import { pool } from "../../config/db";
+import { Prisma } from "../../generated/prisma/client";
+import { prisma } from "../../lib/prisma";
 
 type PublicUser = {
   id: number;
   name: string;
   email: string;
-  phone: number;
+  phone: string | null;
   role: string;
-  created_at: string;
-  updated_at: string;
+  created_at: Date | null;
+  updated_at: Date | null;
 };
 
-/**
- * Auth actor shape expected from req.user
- */
 type Actor = {
   id: number;
   role: "admin" | "customer";
 };
 
-/**
- * Get all users (Admin)
- */
+const userSelect = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  role: true,
+  createdAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.UserSelect;
+
+type SelectedUser = Prisma.UserGetPayload<{ select: typeof userSelect }>;
+
+const toPublicUser = (user: SelectedUser): PublicUser => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  phone: user.phone,
+  role: user.role,
+  created_at: user.createdAt,
+  updated_at: user.updatedAt,
+});
+
+const appError = (
+  message: string,
+  status: number,
+): Error & { status: number } => Object.assign(new Error(message), { status });
+
 const getAllUsers = async (): Promise<PublicUser[]> => {
-  const q = `SELECT id, name, email, phone, role, created_at, updated_at FROM users ORDER BY id`;
-  const res = await pool.query(q);
-  return res.rows as PublicUser[];
+  const users = await prisma.user.findMany({
+    orderBy: { id: "asc" },
+    select: userSelect,
+  });
+  return users.map(toPublicUser);
 };
 
-/**
- * Update user
- *
- * - actor must be provided (the authenticated user performing the action)
- * - Admin can update any user and change role
- * - Customer can update only their own profile and cannot change role
- */
 const updateUser = async (
   userId: number,
-  payload: Partial<{ name: string; email: string; phone: string; role: string }>,
-  actor?: Actor | undefined
+  payload: Partial<{
+    name: string;
+    email: string;
+    phone: string;
+    role: string;
+  }>,
+  actor?: Actor,
 ): Promise<PublicUser> => {
-  // 1) Require authentication (actor present)
-  if (!actor) {
-    const e: any = new Error("Unauthorized");
-    e.status = 401;
-    throw e;
-  }
-
-  // 2) Permission checks
+  if (!actor) throw appError("Unauthorized", 401);
   const isAdmin = actor.role === "admin";
-  const isOwner = actor.id === userId;
-  if (!isAdmin && !isOwner) {
-    const e: any = new Error("Forbidden");
-    e.status = 403;
-    throw e;
-  }
-
-  // Customers cannot change role
+  if (!isAdmin && actor.id !== userId) throw appError("Forbidden", 403);
   if (!isAdmin && payload.role !== undefined) {
-    const e: any = new Error("Forbidden: cannot change role");
-    e.status = 403;
-    throw e;
+    throw appError("Forbidden: cannot change role", 403);
   }
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!existing) throw appError("User not found", 404);
 
-  // 3) Build dynamic update safely (typed keys)
-  const allowedKeys = ["name", "email", "phone", "role"] as const;
-  type AllowedKey = typeof allowedKeys[number];
+  const data: Prisma.UserUpdateInput = { updatedAt: new Date() };
+  if (payload.name !== undefined) data.name = payload.name;
+  if (payload.email !== undefined) data.email = payload.email.toLowerCase();
+  if (payload.phone !== undefined) data.phone = payload.phone;
+  if (payload.role !== undefined) data.role = payload.role;
 
-  const updates: string[] = [];
-  const vals: any[] = [];
-  let idx = 1;
-
-  for (const key of allowedKeys) {
-    const value = payload[key];
-    if (value !== undefined) {
-      // email should be stored lowercased
-      if (key === "email") {
-        updates.push(`${key} = LOWER($${idx})`);
-      } else {
-        updates.push(`${key} = $${idx}`);
-      }
-      vals.push(value);
-      idx++;
+  try {
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data,
+      select: userSelect,
+    });
+    return toPublicUser(updated);
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw appError("Email already registered", 409);
     }
+    throw error;
   }
-
-  // If no updates provided, return current user (or 404 if not found)
-  if (updates.length === 0) {
-    const cur = await pool.query(
-      `SELECT id, name, email, phone, role, created_at, updated_at FROM users WHERE id = $1`,
-      [userId]
-    );
-    if (cur.rowCount === 0) {
-      const e: any = new Error("User not found");
-      e.status = 404;
-      throw e;
-    }
-    return cur.rows[0] as PublicUser;
-  }
-
-  // 4) Execute update and return updated row
-  const updateSql = `
-    UPDATE users
-    SET ${updates.join(", ")}, updated_at = NOW()
-    WHERE id = $${idx}
-    RETURNING id, name, email, phone, role, created_at, updated_at
-  `;
-  vals.push(userId);
-
-  const r = await pool.query(updateSql, vals);
-  if (r.rowCount === 0) {
-    const e: any = new Error("User not found");
-    e.status = 404;
-    throw e;
-  }
-
-  return r.rows[0] as PublicUser;
 };
 
-/**
- * Delete user (Admin only)
- * - Fails if user has active bookings (status = 'active')
- */
 const deleteUser = async (userId: number): Promise<void> => {
-  const userRes = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
-  if (userRes.rowCount === 0) {
-    const e: any = new Error("User not found");
-    e.status = 404;
-    throw e;
-  }
-
-  // bookings table must exist and have status column as per API reference
-  const bookingRes = await pool.query(
-    `SELECT count(*) AS cnt FROM bookings WHERE customer_id = $1 AND status = 'active'`,
-    [userId]
-  );
-  const cnt = Number(bookingRes.rows[0]?.cnt ?? 0);
-  if (cnt > 0) {
-    const e: any = new Error("Cannot delete user with active bookings");
-    e.status = 400;
-    throw e;
-  }
-
-  await pool.query(`DELETE FROM users WHERE id = $1`, [userId]);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!user) throw appError("User not found", 404);
+  const activeBookings = await prisma.booking.count({
+    where: { customerId: userId, status: "active" },
+  });
+  if (activeBookings > 0)
+    throw appError("Cannot delete user with active bookings", 400);
+  await prisma.user.delete({ where: { id: userId } });
 };
 
-export const userService = {
-  getAllUsers,
-  updateUser,
-  deleteUser
-}
+export const userService = { getAllUsers, updateUser, deleteUser };

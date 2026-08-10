@@ -4,10 +4,17 @@ import { authGate } from "../../middleware/auth";
 
 export const bookingRouter = Router();
 
+bookingRouter.get("/options", bookingController.getRentalOptions);
+
 /**
  * Create booking (Customer or Admin)
  */
-bookingRouter.post("/", authGate.requireAuth, bookingController.createBooking);
+bookingRouter.post(
+  "/",
+  authGate.requireAuth,
+  authGate.requireVerifiedPhone,
+  bookingController.createBooking,
+);
 
 /**
  * Get bookings (Admin sees all, Customer sees own)
@@ -19,4 +26,8 @@ bookingRouter.get("/", authGate.requireAuth, bookingController.getBookings);
  * - Customer: cancel (status = "cancelled") BEFORE start date only
  * - Admin: mark returned (status = "returned")
  */
-bookingRouter.put("/:bookingId", authGate.requireAuth, bookingController.updateBooking);
+bookingRouter.put(
+  "/:bookingId",
+  authGate.requireAuth,
+  bookingController.updateBooking,
+);

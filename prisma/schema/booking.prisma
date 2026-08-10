@@ -1,0 +1,37 @@
+/// The non-negative total-price check constraint is preserved in the SQL migration.
+model Booking {
+  id              Int             @id @default(autoincrement())
+  customerId      Int?            @map("customer_id")
+  vehicleId       Int?            @map("vehicle_id")
+  rentStartDate   DateTime        @map("rent_start_date") @db.Date
+  rentEndDate     DateTime        @map("rent_end_date") @db.Date
+  totalPrice      Decimal         @map("total_price") @db.Decimal(10, 2)
+  status          String          @default("active") @db.VarChar(50)
+  createdAt       DateTime?       @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime?       @default(now()) @map("updated_at") @db.Timestamp(6)
+  pickupLocation  String?         @default("Downtown Hub") @map("pickup_location")
+  returnLocation  String?         @default("Downtown Hub") @map("return_location")
+  pickupTime      DateTime?       @default(dbgenerated("'09:00:00'::time without time zone")) @map("pickup_time") @db.Time(6)
+  returnTime      DateTime?       @default(dbgenerated("'17:00:00'::time without time zone")) @map("return_time") @db.Time(6)
+  insurancePlan   String?         @default("none") @map("insurance_plan") @db.VarChar(30)
+  addOns          Json?           @default("[]") @map("add_ons")
+  specialRequests String?         @default("") @map("special_requests")
+  basePrice       Decimal?        @default(0) @map("base_price") @db.Decimal(10, 2)
+  insuranceFee    Decimal?        @default(0) @map("insurance_fee") @db.Decimal(10, 2)
+  addOnsFee       Decimal?        @default(0) @map("add_ons_fee") @db.Decimal(10, 2)
+  discountAmount  Decimal?        @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  taxAmount       Decimal?        @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  depositAmount   Decimal?        @default(0) @map("deposit_amount") @db.Decimal(10, 2)
+  promoCode       String?         @default("") @map("promo_code") @db.VarChar(40)
+  paymentStatus   String?         @default("pending") @map("payment_status") @db.VarChar(30)
+  stripeSessionId String?         @map("stripe_session_id")
+  customer        User?           @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vehicle         Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  supportTickets  SupportTicket[]
+
+  @@index([createdAt(sort: Desc)], map: "idx_bookings_created_at")
+  @@index([customerId], map: "idx_bookings_customer_id")
+  @@index([status], map: "idx_bookings_status")
+  @@index([vehicleId], map: "idx_bookings_vehicle_id")
+  @@map("bookings")
+}

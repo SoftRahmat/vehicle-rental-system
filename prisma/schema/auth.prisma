@@ -1,0 +1,51 @@
+model User {
+  id                Int                     @id @default(autoincrement())
+  name              String                  @db.VarChar(100)
+  role              String                  @default("customer") @db.VarChar(50)
+  email             String                  @unique @db.VarChar(150)
+  password          String?
+  phone             String?                 @db.VarChar(16)
+  createdAt         DateTime?               @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime?               @default(now()) @map("updated_at") @db.Timestamp(6)
+  googleSubject     String?                 @map("google_subject")
+  avatarUrl         String?                 @map("avatar_url")
+  authProvider      String?                 @default("password") @map("auth_provider") @db.VarChar(30)
+  emailVerified     Boolean?                @default(false) @map("email_verified")
+  phoneVerifiedAt   DateTime?               @map("phone_verified_at") @db.Timestamp(6)
+  exchangeCodes     AuthExchangeCode[]
+  bookings          Booking[]
+  verificationCodes PhoneVerificationCode[]
+  supportTickets    SupportTicket[]         @relation("SupportCustomer")
+  assignedTickets   SupportTicket[]         @relation("SupportAssignee")
+  supportMessages   SupportMessage[]
+
+  @@index([createdAt(sort: Desc)], map: "idx_users_created_at")
+  @@index([role], map: "idx_users_role")
+  @@map("users")
+}
+
+model AuthExchangeCode {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  codeHash  String    @unique @map("code_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamp(6)
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("auth_exchange_codes")
+}
+
+model PhoneVerificationCode {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  phone     String    @db.VarChar(16)
+  codeHash  String    @map("code_hash")
+  attempts  Int       @default(0)
+  expiresAt DateTime  @map("expires_at") @db.Timestamp(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamp(6)
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_phone_verification_user")
+  @@map("phone_verification_codes")
+}

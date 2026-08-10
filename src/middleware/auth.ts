@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import config from "../config";
 import type { AuthUser } from "../types/express/index.d.ts";
+import { prisma } from "../lib/prisma";
 
 // verifyJwt stays permissive but we will narrow before attaching
 const verifyJwt = (token: string): any => {
@@ -24,7 +25,9 @@ const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   try {
     payload = verifyJwt(token);
   } catch (err) {
-    return res.status(401).json({ success: false, message: "Invalid or expired token" });
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid or expired token" });
   }
 
   const { id, role, name, email } = payload as {
@@ -35,7 +38,9 @@ const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   };
 
   if (!id || !role) {
-    return res.status(401).json({ success: false, message: "Invalid token payload" });
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid token payload" });
   }
 
   // Create an AuthUser and attach it (ensures proper shape)
@@ -65,7 +70,31 @@ const requireRole = (role: "admin" | "customer") => {
   };
 };
 
+const requireVerifiedPhone = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+  if (req.user.role === "admin") return next();
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    select: { phoneVerifiedAt: true },
+  });
+  if (!user?.phoneVerifiedAt) {
+    return res.status(403).json({
+      success: false,
+      message: "Verify your phone number before creating a booking",
+      code: "PHONE_VERIFICATION_REQUIRED",
+    });
+  }
+  return next();
+};
+
 export const authGate = {
   requireAuth,
-  requireRole
-}
+  requireRole,
+  requireVerifiedPhone,
+};

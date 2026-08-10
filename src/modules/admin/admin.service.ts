@@ -1,7 +1,8 @@
-import { pool } from "../../config/db";
+import { Prisma } from "../../generated/prisma/client";
+import { prisma } from "../../lib/prisma";
 
 type QueryInput = Record<string, unknown>;
-type SortOrder = "ASC" | "DESC";
+type SortOrder = "asc" | "desc";
 
 export type PageResult<T> = {
   items: T[];
@@ -31,7 +32,7 @@ const pageOptions = (query: QueryInput): PageOptions => ({
   pageSize: Math.min(positiveInteger(query.pageSize, 15), 100),
   search: queryText(query.search).slice(0, 100),
   sortOrder:
-    queryText(query.sortOrder).toLowerCase() === "asc" ? "ASC" : "DESC",
+    queryText(query.sortOrder).toLowerCase() === "asc" ? "asc" : "desc",
 });
 
 const resultPage = <T>(
@@ -50,51 +51,58 @@ const getVehicles = async (
   query: QueryInput,
 ): Promise<PageResult<Record<string, unknown>>> => {
   const options = pageOptions(query);
-  const values: unknown[] = [];
-  const conditions: string[] = [];
-  const parameter = (value: unknown): string => {
-    values.push(value);
-    return `$${values.length}`;
-  };
-
-  if (options.search) {
-    const search = parameter(`%${options.search}%`);
-    conditions.push(
-      `(vehicle_name ILIKE ${search} OR registration_number ILIKE ${search})`,
-    );
-  }
   const type = queryText(query.type);
-  if (type) conditions.push(`type = ${parameter(type)}`);
   const status = queryText(query.status);
-  if (status) conditions.push(`availability_status = ${parameter(status)}`);
-
-  const sortColumns: Record<string, string> = {
-    id: "id",
-    vehicle_name: "vehicle_name",
-    type: "type",
-    registration_number: "registration_number",
-    daily_rent_price: "daily_rent_price",
-    availability_status: "availability_status",
-    created_at: "created_at",
+  const where: Prisma.VehicleWhereInput = {
+    ...(options.search
+      ? {
+          OR: [
+            { vehicleName: { contains: options.search, mode: "insensitive" } },
+            {
+              registrationNumber: {
+                contains: options.search,
+                mode: "insensitive",
+              },
+            },
+          ],
+        }
+      : {}),
+    ...(type ? { type } : {}),
+    ...(status ? { availabilityStatus: status } : {}),
   };
-  const sortBy = sortColumns[queryText(query.sortBy)] ?? "created_at";
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const limit = parameter(options.pageSize);
-  const offset = parameter((options.page - 1) * options.pageSize);
-  const response = await pool.query(
-    `SELECT id, vehicle_name, type, registration_number, daily_rent_price,
-            availability_status, image_url, created_at, updated_at,
-            COUNT(*) OVER() AS total_count
-     FROM vehicles
-     ${where}
-     ORDER BY ${sortBy} ${options.sortOrder}, id DESC
-     LIMIT ${limit} OFFSET ${offset}`,
-    values,
-  );
-  const total = Number(response.rows[0]?.total_count ?? 0);
-  const items = response.rows.map(
-    ({ total_count: _total, ...vehicle }) => vehicle,
-  );
+  const sortFields: Record<
+    string,
+    keyof Prisma.VehicleOrderByWithRelationInput
+  > = {
+    id: "id",
+    vehicle_name: "vehicleName",
+    type: "type",
+    registration_number: "registrationNumber",
+    daily_rent_price: "dailyRentPrice",
+    availability_status: "availabilityStatus",
+    created_at: "createdAt",
+  };
+  const sortField = sortFields[queryText(query.sortBy)] ?? "createdAt";
+  const [records, total] = await prisma.$transaction([
+    prisma.vehicle.findMany({
+      where,
+      orderBy: [{ [sortField]: options.sortOrder }, { id: "desc" }],
+      skip: (options.page - 1) * options.pageSize,
+      take: options.pageSize,
+    }),
+    prisma.vehicle.count({ where }),
+  ]);
+  const items = records.map((vehicle) => ({
+    id: vehicle.id,
+    vehicle_name: vehicle.vehicleName,
+    type: vehicle.type,
+    registration_number: vehicle.registrationNumber,
+    daily_rent_price: Number(vehicle.dailyRentPrice),
+    availability_status: vehicle.availabilityStatus,
+    image_url: vehicle.imageUrl,
+    created_at: vehicle.createdAt,
+    updated_at: vehicle.updatedAt,
+  }));
   return resultPage(items, total, options);
 };
 
@@ -102,67 +110,95 @@ const getBookings = async (
   query: QueryInput,
 ): Promise<PageResult<Record<string, unknown>>> => {
   const options = pageOptions(query);
-  const values: unknown[] = [];
-  const conditions: string[] = [];
-  const parameter = (value: unknown): string => {
-    values.push(value);
-    return `$${values.length}`;
-  };
-
-  if (options.search) {
-    const search = parameter(`%${options.search}%`);
-    conditions.push(
-      `(u.name ILIKE ${search} OR u.email ILIKE ${search} OR v.vehicle_name ILIKE ${search} OR v.registration_number ILIKE ${search})`,
-    );
-  }
   const status = queryText(query.status);
-  if (status) conditions.push(`b.status = ${parameter(status)}`);
-
-  const sortColumns: Record<string, string> = {
-    id: "b.id",
-    customer: "u.name",
-    vehicle: "v.vehicle_name",
-    rent_start_date: "b.rent_start_date",
-    rent_end_date: "b.rent_end_date",
-    total_price: "b.total_price",
-    status: "b.status",
-    created_at: "b.created_at",
+  const where: Prisma.BookingWhereInput = {
+    ...(options.search
+      ? {
+          OR: [
+            {
+              customer: {
+                name: { contains: options.search, mode: "insensitive" },
+              },
+            },
+            {
+              customer: {
+                email: { contains: options.search, mode: "insensitive" },
+              },
+            },
+            {
+              vehicle: {
+                vehicleName: { contains: options.search, mode: "insensitive" },
+              },
+            },
+            {
+              vehicle: {
+                registrationNumber: {
+                  contains: options.search,
+                  mode: "insensitive",
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+    ...(status ? { status } : {}),
   };
-  const sortBy = sortColumns[queryText(query.sortBy)] ?? "b.created_at";
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const limit = parameter(options.pageSize);
-  const offset = parameter((options.page - 1) * options.pageSize);
-  const response = await pool.query(
-    `SELECT b.id, b.customer_id, b.vehicle_id, b.rent_start_date, b.rent_end_date,
-            b.total_price, b.status, b.created_at, b.updated_at,
-            u.name AS customer_name, u.email AS customer_email,
-            v.vehicle_name, v.registration_number, v.type,
-            COUNT(*) OVER() AS total_count
-     FROM bookings b
-     LEFT JOIN users u ON u.id = b.customer_id
-     LEFT JOIN vehicles v ON v.id = b.vehicle_id
-     ${where}
-     ORDER BY ${sortBy} ${options.sortOrder}, b.id DESC
-     LIMIT ${limit} OFFSET ${offset}`,
-    values,
-  );
-  const total = Number(response.rows[0]?.total_count ?? 0);
-  const items = response.rows.map((row) => ({
-    id: row.id,
-    customer_id: row.customer_id,
-    vehicle_id: row.vehicle_id,
-    rent_start_date: row.rent_start_date,
-    rent_end_date: row.rent_end_date,
-    total_price: row.total_price,
-    status: row.status,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    customer: { name: row.customer_name, email: row.customer_email },
-    vehicle: {
-      vehicle_name: row.vehicle_name,
-      registration_number: row.registration_number,
-      type: row.type,
-    },
+  const sortFields: Record<
+    string,
+    keyof Prisma.BookingOrderByWithRelationInput
+  > = {
+    id: "id",
+    rent_start_date: "rentStartDate",
+    rent_end_date: "rentEndDate",
+    total_price: "totalPrice",
+    status: "status",
+    created_at: "createdAt",
+  };
+  const requestedSort = queryText(query.sortBy);
+  let orderBy: Prisma.BookingOrderByWithRelationInput;
+  if (requestedSort === "customer") {
+    orderBy = { customer: { name: options.sortOrder } };
+  } else if (requestedSort === "vehicle") {
+    orderBy = { vehicle: { vehicleName: options.sortOrder } };
+  } else {
+    const field = sortFields[requestedSort] ?? "createdAt";
+    orderBy = { [field]: options.sortOrder };
+  }
+  const [records, total] = await prisma.$transaction([
+    prisma.booking.findMany({
+      where,
+      include: {
+        customer: { select: { name: true, email: true } },
+        vehicle: {
+          select: { vehicleName: true, registrationNumber: true, type: true },
+        },
+      },
+      orderBy: [orderBy, { id: "desc" }],
+      skip: (options.page - 1) * options.pageSize,
+      take: options.pageSize,
+    }),
+    prisma.booking.count({ where }),
+  ]);
+  const items = records.map((booking) => ({
+    id: booking.id,
+    customer_id: booking.customerId,
+    vehicle_id: booking.vehicleId,
+    rent_start_date: booking.rentStartDate.toISOString().slice(0, 10),
+    rent_end_date: booking.rentEndDate.toISOString().slice(0, 10),
+    total_price: Number(booking.totalPrice),
+    status: booking.status,
+    created_at: booking.createdAt,
+    updated_at: booking.updatedAt,
+    customer: booking.customer
+      ? { name: booking.customer.name, email: booking.customer.email }
+      : null,
+    vehicle: booking.vehicle
+      ? {
+          vehicle_name: booking.vehicle.vehicleName,
+          registration_number: booking.vehicle.registrationNumber,
+          type: booking.vehicle.type,
+        }
+      : null,
   }));
   return resultPage(items, total, options);
 };
@@ -171,62 +207,67 @@ const getUsers = async (
   query: QueryInput,
 ): Promise<PageResult<Record<string, unknown>>> => {
   const options = pageOptions(query);
-  const values: unknown[] = [];
-  const conditions: string[] = [];
-  const parameter = (value: unknown): string => {
-    values.push(value);
-    return `$${values.length}`;
-  };
-
-  if (options.search) {
-    const search = parameter(`%${options.search}%`);
-    conditions.push(
-      `(name ILIKE ${search} OR email ILIKE ${search} OR phone ILIKE ${search})`,
-    );
-  }
   const role = queryText(query.role);
-  if (role) conditions.push(`role = ${parameter(role)}`);
-
-  const sortColumns: Record<string, string> = {
-    id: "id",
-    name: "name",
-    email: "email",
-    role: "role",
-    created_at: "created_at",
+  const where: Prisma.UserWhereInput = {
+    ...(options.search
+      ? {
+          OR: [
+            { name: { contains: options.search, mode: "insensitive" } },
+            { email: { contains: options.search, mode: "insensitive" } },
+            { phone: { contains: options.search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+    ...(role ? { role } : {}),
   };
-  const sortBy = sortColumns[queryText(query.sortBy)] ?? "created_at";
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const limit = parameter(options.pageSize);
-  const offset = parameter((options.page - 1) * options.pageSize);
-  const response = await pool.query(
-    `SELECT id, name, email, phone, role, created_at, updated_at,
-            COUNT(*) OVER() AS total_count
-     FROM users
-     ${where}
-     ORDER BY ${sortBy} ${options.sortOrder}, id DESC
-     LIMIT ${limit} OFFSET ${offset}`,
-    values,
-  );
-  const total = Number(response.rows[0]?.total_count ?? 0);
-  const items = response.rows.map(({ total_count: _total, ...user }) => user);
+  const sortFields: Record<string, keyof Prisma.UserOrderByWithRelationInput> =
+    {
+      id: "id",
+      name: "name",
+      email: "email",
+      role: "role",
+      created_at: "createdAt",
+    };
+  const sortField = sortFields[queryText(query.sortBy)] ?? "createdAt";
+  const [records, total] = await prisma.$transaction([
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: [{ [sortField]: options.sortOrder }, { id: "desc" }],
+      skip: (options.page - 1) * options.pageSize,
+      take: options.pageSize,
+    }),
+    prisma.user.count({ where }),
+  ]);
+  const items = records.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    created_at: user.createdAt,
+    updated_at: user.updatedAt,
+  }));
   return resultPage(items, total, options);
 };
 
 const getDashboardStats = async (): Promise<Record<string, number>> => {
-  const response = await pool.query(`
-    SELECT
-      (SELECT COUNT(*) FROM vehicles) AS vehicles,
-      (SELECT COUNT(*) FROM vehicles WHERE availability_status = 'available') AS available,
-      (SELECT COUNT(*) FROM bookings WHERE status = 'active') AS active_bookings,
-      (SELECT COUNT(*) FROM users WHERE role = 'customer') AS customers
-  `);
-  const stats = response.rows[0];
-  return {
-    vehicles: Number(stats.vehicles),
-    available: Number(stats.available),
-    activeBookings: Number(stats.active_bookings),
-    customers: Number(stats.customers),
-  };
+  const [vehicles, available, activeBookings, customers] =
+    await prisma.$transaction([
+      prisma.vehicle.count(),
+      prisma.vehicle.count({ where: { availabilityStatus: "available" } }),
+      prisma.booking.count({ where: { status: "active" } }),
+      prisma.user.count({ where: { role: "customer" } }),
+    ]);
+  return { vehicles, available, activeBookings, customers };
 };
 
 export const adminService = {
