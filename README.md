@@ -1,169 +1,162 @@
-🚗 Vehicle Rental System (Backend API)
+# Vehicle Rental System API
 
-A modular, scalable backend API for managing vehicle rentals, built with **Express.js**, **TypeScript**, **PostgreSQL**, and **JWT Authentication**.
+Express and TypeScript REST API for Roadly, backed by PostgreSQL with JWT authentication and role-based access control.
 
-**Live API URL:**  
-> https://express-project-iota.vercel.app/
+The Angular client lives in the sibling `vehicle-rental-angular` repository.
 
-## 🌟 Features
+## Features
 
-### 🔐 Authentication & Authorization
-- Secure JWT-based login & registration  
-- Role-based access: **Admin** and **Customer**  
-- Middleware-protected routes  
-- Permission rules enforced at service level
+- Customer registration and sign-in with JWT authentication
+- Customer and administrator roles
+- Vehicle creation, editing, deletion, availability, and image URLs
+- Car, bike, van, and SUV fleet types
+- Booking creation with date, overlap, and availability validation
+- Customer booking history and eligible cancellation
+- Administrator booking return workflow
+- Administrator user role changes and deletion controls
+- Paginated administrator endpoints with search, filtering, and sorting
+- Configurable CORS origin for the Angular frontend
+- Centralized JSON error responses
+- Automatic PostgreSQL table initialization during application startup
 
-### 🚘 Vehicle Management
-- Full CRUD for vehicles  
-- Availability tracking (`available` → `booked`)  
-- Unique registration number validation  
-- Vehicle type validation: `car`, `bike`, `van`, `SUV`
+## Technology
 
-### 📅 Booking Management
-- Create bookings with strict date validation  
-- Prevent overlapping bookings  
-- Price calculation: `daily_rate × total_days`  
-- Customer cancellation rules (only *before* start date)  
-- Admin return flow sets vehicle back to `available`  
-- Admin sees **all bookings**, customer sees **only theirs**
-
-### 👤 User Management
-- Admin: list, update, delete any user  
-- User: update own profile  
-- Delete restricted if active bookings exist  
-- Email uniqueness enforced (`23505` constraint handling)
-
-### ⚙️ Technical Highlights
-- Modular Express architecture  
-- TypeScript (strict mode)  
-- PostgreSQL via `pg` connection pool  
-- Centralized config loader  
-- Universal async error wrapper  
-- Global error handling middleware  
-- Environment-based configuration  
-- Production-ready structure
-
-## 🛠️ Technology Stack
-
-### Backend
-- Node.js + Express.js  
-- TypeScript  
-- PostgreSQL (`pg`)  
-- JWT Authentication  
-- bcryptjs  
+- Node.js
+- Express 5
+- TypeScript
+- PostgreSQL with `pg`
+- JSON Web Tokens
+- bcryptjs
 - date-fns
 
-### Developer Tools
+## Local setup
 
-- VS Code extensions
+### Requirements
 
-## 📁 Project Structure
+- Node.js 20 or newer
+- npm
+- PostgreSQL
 
-```
-├─ src/
-│  ├─ config/
-│  │  ├─ db.ts
-│  │  └─ index.ts
-│  ├─ middleware/
-│  │  └─ auth.ts
-│  ├─ modules/
-│  │  ├─ auth/
-│  │  │  ├─ auth.controller.ts
-│  │  │  ├─ auth.routes.ts
-│  │  │  └─ auth.service.ts
-│  │  ├─ booking/
-│  │  │  ├─ booking.controller.ts
-│  │  │  ├─ booking.routes.ts
-│  │  │  └─ booking.service.ts
-│  │  ├─ user/
-│  │  │  ├─ user.controller.ts
-│  │  │  ├─ user.routes.ts
-│  │  │  └─ user.service.ts
-│  │  └─ vehicle/
-│  │     ├─ vehicle.controller.ts
-│  │     ├─ vehicle.routes.ts
-│  │     └─ vehicle.service.ts
-│  ├─ types/
-│  │  └─ express/
-│  │     └─ index.d.ts
-│  ├─ utils/
-│  │  └─ asyncHandler.ts
-│  ├─ app.ts
-│  └─ server.ts
-├─ .env
-├─ .gitignore
-├─ package-lock.json
-├─ package.json
-├─ README.md
-├─ tsconfig.json
-└─ vercel.json
-```
+### Installation
 
-## 🚀 Setup & Installation
-
-### 1️⃣ Clone the Repository
-
-```
-git clone https://github.com/SoftRahmat/vehicle-rental-system.git
-cd vehicle-rental-system
-
-```
-
-### 2️⃣ Install Dependencies
-
+```bash
 npm install
-
-### 3️⃣ Environment Variables
-
-Create a .env file:
 ```
+
+Create a `.env` file in the project root:
+
+```env
 PORT=5000
-DATABASE_URL=your_db_connection_url
-JWT_SECRET=your_strong_secret_key
-FRONTEND_URL=https://your-angular-app.example.com
-
-```
-### 4️⃣ Initialize Database
-
-npm run dev
-
-### 5️⃣ Start Development Server
-
-npm run dev
-
-## 🗄️ Database Initialization
-`src/config/db.ts` provides `initDB()` to create required tables (`users`, `vehicles`, `bookings`). On server start we call `initDB()` in `app.ts`.
-
-If running migrations manually, use:
-
-```sql
-CREATE TABLE users (...);
-CREATE TABLE vehicles (...);
-CREATE TABLE bookings (...);
+DATABASE_URL=postgresql://username:password@localhost:5432/vehicle_rental
+JWT_SECRET=replace-with-a-long-random-secret
+FRONTEND_URL=http://localhost:4200
 ```
 
----
+Do not commit `.env`; it is intentionally ignored by Git.
 
-## 📦 Recommended Deployment Workflow
+Start the development server:
 
-1. Push to GitHub.
-2. On Vercel, import the repo. For Option A, Vercel will build serverless functions automatically.
-3. Set Environment Variables in the Vercel dashboard.
-4. Trigger deploy.
+```bash
+npm run dev
+```
 
----
+The API is available at `http://localhost:5000/api/v1`.
 
-## 🔐 Security & Production Tips
+## Scripts
 
-- Use a strong `JWT_SECRET` and rotate periodically.
-- Use SSL/TLS for DB connections and API.
-- Move sensitive credentials to Vercel Environment Variables (never commit `.env`).
-- Add rate-limiting and request validation (zod) for public endpoints.
+| Command         | Description                               |
+| --------------- | ----------------------------------------- |
+| `npm run dev`   | Start the TypeScript server in watch mode |
+| `npm run build` | Compile TypeScript into `dist`            |
 
-### 🧩 Future Enhancements
+## API overview
 
-- Email notifications
-- Payment integration
-- Vehicle image uploads
-- Admin dashboard UI
-- Cron job automation
+### Authentication
+
+| Method | Endpoint              | Access |
+| ------ | --------------------- | ------ |
+| `POST` | `/api/v1/auth/signup` | Public |
+| `POST` | `/api/v1/auth/signin` | Public |
+
+### Vehicles
+
+| Method   | Endpoint                      | Access |
+| -------- | ----------------------------- | ------ |
+| `GET`    | `/api/v1/vehicles`            | Public |
+| `GET`    | `/api/v1/vehicles/:vehicleId` | Public |
+| `POST`   | `/api/v1/vehicles`            | Admin  |
+| `PUT`    | `/api/v1/vehicles/:vehicleId` | Admin  |
+| `DELETE` | `/api/v1/vehicles/:vehicleId` | Admin  |
+
+### Bookings
+
+| Method | Endpoint                      | Access                          |
+| ------ | ----------------------------- | ------------------------------- |
+| `GET`  | `/api/v1/bookings`            | Authenticated                   |
+| `POST` | `/api/v1/bookings`            | Authenticated                   |
+| `PUT`  | `/api/v1/bookings/:bookingId` | Authenticated, role rules apply |
+
+### Users
+
+| Method   | Endpoint                | Access                 |
+| -------- | ----------------------- | ---------------------- |
+| `GET`    | `/api/v1/users`         | Admin                  |
+| `PUT`    | `/api/v1/users/:userId` | Admin or account owner |
+| `DELETE` | `/api/v1/users/:userId` | Admin                  |
+
+### Administration
+
+| Method | Endpoint                        | Description               |
+| ------ | ------------------------------- | ------------------------- |
+| `GET`  | `/api/v1/admin/dashboard/stats` | Dashboard totals          |
+| `GET`  | `/api/v1/admin/vehicles`        | Paginated fleet records   |
+| `GET`  | `/api/v1/admin/bookings`        | Paginated booking records |
+| `GET`  | `/api/v1/admin/users`           | Paginated user records    |
+
+Administrator list endpoints accept these common query parameters:
+
+- `page`: page number, default `1`
+- `pageSize`: records per request, default `15`, maximum `100`
+- `search`: text search
+- `sortBy`: supported database field
+- `sortOrder`: `asc` or `desc`
+
+Endpoint-specific filters include `type`, `status`, and `role`. Responses include `items`, `page`, `pageSize`, `total`, and `totalPages`.
+
+Send authenticated requests with:
+
+```http
+Authorization: Bearer <token>
+```
+
+## Project structure
+
+```text
+src/
+  config/       Environment and PostgreSQL configuration
+  middleware/   Authentication and authorization middleware
+  modules/
+    admin/      Dashboard and paginated administration queries
+    auth/       Registration and sign-in
+    booking/    Rental lifecycle
+    user/       Account management
+    vehicle/    Fleet management
+  types/        Express type extensions
+  utils/        Shared server utilities
+  app.ts        Express application
+  server.ts     Development server entry point
+```
+
+## Deployment
+
+The repository contains `vercel.json` for Vercel deployment. Configure `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, and any required platform variables in the deployment environment.
+
+The currently configured production API URL is:
+
+`https://express-project-iota.vercel.app/`
+
+## Current limitations
+
+- No automated backend test suite is configured yet
+- Vehicle images use URLs rather than managed file uploads
+- Payments and notification delivery are not implemented

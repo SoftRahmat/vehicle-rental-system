@@ -7,6 +7,7 @@ import { bookingRouter } from "./modules/booking/booking.routes";
 import cors from "cors";
 import type { NextFunction, Request, Response } from "express";
 import config from "./config";
+import { adminRouter } from "./modules/admin/admin.routes";
 
 const app = express();
 
@@ -21,7 +22,10 @@ const WHITELIST = [
 
 // Core CORS options
 const corsOptions = {
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+  origin: (
+    origin: string | undefined,
+    callback: (err: Error | null, allow?: boolean) => void,
+  ) => {
     if (!origin) return callback(null, true); // server-to-server or curl
     if (WHITELIST.includes(origin)) return callback(null, true);
     return callback(new Error("CORS: Origin not allowed"));
@@ -45,7 +49,10 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Credentials", "true");
     res.header("Access-Control-Allow-Methods", corsOptions.methods.join(","));
-    res.header("Access-Control-Allow-Headers", corsOptions.allowedHeaders.join(","));
+    res.header(
+      "Access-Control-Allow-Headers",
+      corsOptions.allowedHeaders.join(","),
+    );
     return res.sendStatus(204);
   }
 
@@ -53,7 +60,10 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", origin);
     res.header("Access-Control-Allow-Credentials", "true");
     res.header("Access-Control-Allow-Methods", corsOptions.methods.join(","));
-    res.header("Access-Control-Allow-Headers", corsOptions.allowedHeaders.join(","));
+    res.header(
+      "Access-Control-Allow-Headers",
+      corsOptions.allowedHeaders.join(","),
+    );
     return res.sendStatus(204);
   }
 
@@ -87,6 +97,9 @@ app.use("/api/v1/vehicles", vehicleRouter);
 
 // booking router
 app.use("/api/v1/bookings", bookingRouter);
+
+// Paginated administration endpoints.
+app.use("/api/v1/admin", adminRouter);
 
 // Keep API errors in one predictable shape for web and mobile clients.
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

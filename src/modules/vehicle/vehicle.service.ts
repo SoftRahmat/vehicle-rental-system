@@ -13,6 +13,7 @@ export type Vehicle = {
   registration_number: string;
   daily_rent_price: number;
   availability_status: "available" | "booked" | string;
+  image_url?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -26,12 +27,24 @@ const createVehicle = async (input: {
   registration_number: string;
   daily_rent_price: number;
   availability_status?: string;
+  image_url?: string;
 }): Promise<Vehicle> => {
-  const { vehicle_name, type, registration_number, daily_rent_price } = input;
+  const {
+    vehicle_name,
+    type,
+    registration_number,
+    daily_rent_price,
+    image_url,
+  } = input;
   const availability_status = input.availability_status ?? "available";
 
   // Basic validation
-  if (!vehicle_name || !type || !registration_number || daily_rent_price == null) {
+  if (
+    !vehicle_name ||
+    !type ||
+    !registration_number ||
+    daily_rent_price == null
+  ) {
     const e: any = new Error("Missing required fields");
     e.status = 400;
     throw e;
@@ -40,7 +53,7 @@ const createVehicle = async (input: {
   // Validate allowed vehicle types
   if (!ALLOWED_VEHICLE_TYPES.includes(type as VehicleType)) {
     const e: any = new Error(
-      `Invalid vehicle type. Allowed types are: ${ALLOWED_VEHICLE_TYPES.join(", ")}`
+      `Invalid vehicle type. Allowed types are: ${ALLOWED_VEHICLE_TYPES.join(", ")}`,
     );
     e.status = 400;
     throw e;
@@ -54,11 +67,18 @@ const createVehicle = async (input: {
 
   const sql = `
     INSERT INTO vehicles
-      (vehicle_name, type, registration_number, daily_rent_price, availability_status)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING id, vehicle_name, type, registration_number, daily_rent_price, availability_status, created_at, updated_at
+      (vehicle_name, type, registration_number, daily_rent_price, availability_status, image_url)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING id, vehicle_name, type, registration_number, daily_rent_price, availability_status, image_url, created_at, updated_at
   `;
-  const params = [vehicle_name, type, registration_number, daily_rent_price, availability_status];
+  const params = [
+    vehicle_name,
+    type,
+    registration_number,
+    daily_rent_price,
+    availability_status,
+    image_url ?? null,
+  ];
 
   try {
     const r = await pool.query(sql, params);
@@ -82,8 +102,8 @@ const createVehicle = async (input: {
  */
 const getAllVehicles = async (): Promise<Vehicle[]> => {
   const r = await pool.query(
-    `SELECT id, vehicle_name, type, registration_number, daily_rent_price, availability_status, created_at, updated_at
-     FROM vehicles ORDER BY id`
+    `SELECT id, vehicle_name, type, registration_number, daily_rent_price, availability_status, image_url, created_at, updated_at
+     FROM vehicles ORDER BY id`,
   );
   return r.rows as Vehicle[];
 };
@@ -93,9 +113,9 @@ const getAllVehicles = async (): Promise<Vehicle[]> => {
  */
 const getVehicleById = async (vehicleId: number): Promise<Vehicle> => {
   const r = await pool.query(
-    `SELECT id, vehicle_name, type, registration_number, daily_rent_price, availability_status, created_at, updated_at
+    `SELECT id, vehicle_name, type, registration_number, daily_rent_price, availability_status, image_url, created_at, updated_at
      FROM vehicles WHERE id = $1`,
-    [vehicleId]
+    [vehicleId],
   );
   if (r.rowCount === 0) {
     const e: any = new Error("Vehicle not found");
@@ -116,10 +136,18 @@ const updateVehicle = async (
     registration_number: string;
     daily_rent_price: number;
     availability_status: string;
-  }>
+    image_url: string;
+  }>,
 ): Promise<Vehicle> => {
-  const allowedKeys = ["vehicle_name", "type", "registration_number", "daily_rent_price", "availability_status"] as const;
-  type AllowedKey = typeof allowedKeys[number];
+  const allowedKeys = [
+    "vehicle_name",
+    "type",
+    "registration_number",
+    "daily_rent_price",
+    "availability_status",
+    "image_url",
+  ] as const;
+  type AllowedKey = (typeof allowedKeys)[number];
 
   const updates: string[] = [];
   const vals: any[] = [];
@@ -129,7 +157,12 @@ const updateVehicle = async (
     const value = payload[key as AllowedKey];
     if (value !== undefined) {
       // if updating numeric, don't wrap with LOWER
-      if (key === "registration_number" || key === "vehicle_name" || key === "type" || key === "availability_status") {
+      if (
+        key === "registration_number" ||
+        key === "vehicle_name" ||
+        key === "type" ||
+        key === "availability_status"
+      ) {
         updates.push(`${key} = $${idx}`);
       } else {
         updates.push(`${key} = $${idx}`);
@@ -142,9 +175,9 @@ const updateVehicle = async (
   if (updates.length === 0) {
     // return current row
     const cur = await pool.query(
-      `SELECT id, vehicle_name, type, registration_number, daily_rent_price, availability_status, created_at, updated_at
+      `SELECT id, vehicle_name, type, registration_number, daily_rent_price, availability_status, image_url, created_at, updated_at
        FROM vehicles WHERE id = $1`,
-      [vehicleId]
+      [vehicleId],
     );
     if (cur.rowCount === 0) {
       const e: any = new Error("Vehicle not found");
@@ -158,7 +191,7 @@ const updateVehicle = async (
     UPDATE vehicles
     SET ${updates.join(", ")}, updated_at = NOW()
     WHERE id = $${idx}
-    RETURNING id, vehicle_name, type, registration_number, daily_rent_price, availability_status, created_at, updated_at
+    RETURNING id, vehicle_name, type, registration_number, daily_rent_price, availability_status, image_url, created_at, updated_at
   `;
   vals.push(vehicleId);
 
@@ -191,7 +224,9 @@ const updateVehicle = async (
 const deleteVehicle = async (vehicleId: number): Promise<void> => {
   try {
     // ensure exists
-    const v = await pool.query(`SELECT id FROM vehicles WHERE id = $1`, [vehicleId]);
+    const v = await pool.query(`SELECT id FROM vehicles WHERE id = $1`, [
+      vehicleId,
+    ]);
     if (v.rowCount === 0) {
       const e: any = new Error("Vehicle not found");
       e.status = 404;
@@ -201,7 +236,7 @@ const deleteVehicle = async (vehicleId: number): Promise<void> => {
     // check active bookings
     const bookingRes = await pool.query(
       `SELECT count(*) AS cnt FROM bookings WHERE vehicle_id = $1 AND status = 'active'`,
-      [vehicleId]
+      [vehicleId],
     );
     const cnt = Number(bookingRes.rows[0]?.cnt ?? 0);
     if (cnt > 0) {
@@ -230,5 +265,5 @@ export const vehicleService = {
   getAllVehicles,
   getVehicleById,
   updateVehicle,
-  deleteVehicle
-}
+  deleteVehicle,
+};

@@ -7,7 +7,6 @@ export const pool = new Pool({
 });
 
 const initDB = async (): Promise<void> => {
-
   // User table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -36,6 +35,11 @@ const initDB = async (): Promise<void> => {
     );
   `);
 
+  // Additive migration for databases created before vehicle imagery was supported.
+  await pool.query(
+    `ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS image_url TEXT;`,
+  );
+
   // Booking table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS bookings (
@@ -49,6 +53,19 @@ const initDB = async (): Promise<void> => {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
+  `);
+
+  // Indexes used by paginated administration filters and sorting.
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_vehicles_type ON vehicles(type);
+    CREATE INDEX IF NOT EXISTS idx_vehicles_availability ON vehicles(availability_status);
+    CREATE INDEX IF NOT EXISTS idx_vehicles_created_at ON vehicles(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
+    CREATE INDEX IF NOT EXISTS idx_bookings_created_at ON bookings(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_bookings_customer_id ON bookings(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_vehicle_id ON bookings(vehicle_id);
+    CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+    CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC);
   `);
 };
 
