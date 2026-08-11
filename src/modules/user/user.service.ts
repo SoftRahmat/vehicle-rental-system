@@ -13,7 +13,7 @@ type PublicUser = {
 
 type Actor = {
   id: number;
-  role: "admin" | "customer";
+  role: "admin" | "customer" | "driver";
 };
 
 const userSelect = {

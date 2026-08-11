@@ -46,7 +46,8 @@ const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   // Create an AuthUser and attach it (ensures proper shape)
   const authUser: AuthUser = {
     id: Number(id),
-    role: role === "admin" ? "admin" : "customer",
+    role:
+      role === "admin" ? "admin" : role === "driver" ? "driver" : "customer",
   };
   if (name) authUser.name = String(name);
   if (email) authUser.email = String(email);
@@ -56,7 +57,9 @@ const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   return next();
 };
 
-const requireRole = (role: "admin" | "customer") => {
+type Role = "admin" | "customer" | "driver";
+
+const requireRole = (role: Role) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -66,6 +69,16 @@ const requireRole = (role: "admin" | "customer") => {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
+    return next();
+  };
+};
+
+const requireAnyRole = (roles: Role[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!roles.includes(req.user.role))
+      return res.status(403).json({ success: false, message: "Forbidden" });
     return next();
   };
 };
@@ -97,4 +110,5 @@ export const authGate = {
   requireAuth,
   requireRole,
   requireVerifiedPhone,
+  requireAnyRole,
 };

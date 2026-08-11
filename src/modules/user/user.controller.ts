@@ -7,13 +7,11 @@ import { userService } from "./user.service";
  */
 const getAllUsers = asyncHandler(async (_req: Request, res: Response) => {
   const users = await userService.getAllUsers();
-  res.status(200).json(
-    {
-      success: true,
-      message: "Users retrieved successfully",
-      data: users
-    }
-  );
+  res.status(200).json({
+    success: true,
+    message: "Users retrieved successfully",
+    data: users,
+  });
 });
 
 /**
@@ -23,17 +21,15 @@ const getAllUsers = asyncHandler(async (_req: Request, res: Response) => {
 const updateUser = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const actor = req.user;
- 
+
   const payload = req.body;
 
   const updated = await userService.updateUser(Number(userId), payload, actor);
-  res.status(200).json(
-    {
-      success: true,
-      message: "User updated successfully",
-      data: updated
-    }
-  );
+  res.status(200).json({
+    success: true,
+    message: "User updated successfully",
+    data: updated,
+  });
 });
 
 /**
@@ -43,16 +39,14 @@ const updateUser = asyncHandler(async (req: Request, res: Response) => {
 const deleteUser = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
   await userService.deleteUser(Number(userId));
-  res.status(200).json(
-    {
-      success: true,
-      message: "User deleted successfully"
-    }
-  );
+  res.status(200).json({
+    success: true,
+    message: "User deleted successfully",
+  });
 });
 
 export const userController = {
   getAllUsers,
   updateUser,
-  deleteUser
-}
+  deleteUser,
+};

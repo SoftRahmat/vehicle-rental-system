@@ -3,7 +3,7 @@
  */
 export type AuthUser = {
   id: number;
-  role: "admin" | "customer";
+  role: "admin" | "customer" | "driver";
   name?: string;
   email?: string;
 };

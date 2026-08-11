@@ -10,6 +10,8 @@ import { adminRouter } from "./modules/admin/admin.routes";
 import { paymentController } from "./modules/payment/payment.controller";
 import { paymentRouter } from "./modules/payment/payment.routes";
 import { supportRouter } from "./modules/support/support.routes";
+import { driverRideRouter, rideRouter } from "./modules/ride/ride.routes";
+import { rideNotificationRouter } from "./modules/ride-notification/ride-notification.routes";
 
 const app = express();
 
@@ -108,6 +110,9 @@ app.use("/api/v1/bookings", bookingRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/payments", paymentRouter);
 app.use("/api/v1/support", supportRouter);
+app.use("/api/v1/rides", rideRouter);
+app.use("/api/v1/driver/rides", driverRideRouter);
+app.use("/api/v1/notifications", rideNotificationRouter);
 
 // Keep API errors in one predictable shape for web and mobile clients.
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

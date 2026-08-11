@@ -1,7 +1,7 @@
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 
-type Actor = { id: number; role: "admin" | "customer" };
+type Actor = { id: number; role: "admin" | "customer" | "driver" };
 type QueryInput = Record<string, unknown>;
 
 const CATEGORIES = [
@@ -10,6 +10,9 @@ const CATEGORIES = [
   "pickup",
   "return",
   "account",
+  "driver",
+  "earnings",
+  "safety",
   "general",
 ];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -22,7 +25,9 @@ const STATUSES = [
 ];
 
 const ticketInclude = {
-  customer: { select: { id: true, name: true, email: true, avatarUrl: true } },
+  customer: {
+    select: { id: true, name: true, email: true, role: true, avatarUrl: true },
+  },
   assignedAdmin: { select: { id: true, name: true } },
   booking: {
     select: {
@@ -31,6 +36,20 @@ const ticketInclude = {
       rentEndDate: true,
       status: true,
       vehicle: { select: { vehicleName: true, registrationNumber: true } },
+    },
+  },
+  ride: {
+    select: {
+      id: true,
+      reference: true,
+      serviceType: true,
+      status: true,
+      pickupAddress: true,
+      dropoffAddress: true,
+      requestedAt: true,
+      estimatedFare: true,
+      finalFare: true,
+      paymentStatus: true,
     },
   },
   messages: {
@@ -86,6 +105,7 @@ const toTicket = (ticket: TicketRecord) => ({
   reference: `SUP-${String(ticket.id).padStart(5, "0")}`,
   customer_id: ticket.customerId,
   booking_id: ticket.bookingId,
+  ride_id: ticket.rideId,
   assigned_admin_id: ticket.assignedAdminId,
   subject: ticket.subject,
   category: ticket.category,
@@ -100,6 +120,7 @@ const toTicket = (ticket: TicketRecord) => ({
     id: ticket.customer.id,
     name: ticket.customer.name,
     email: ticket.customer.email,
+    role: ticket.customer.role,
     avatar_url: ticket.customer.avatarUrl,
   },
   assigned_admin: ticket.assignedAdmin,
@@ -117,6 +138,20 @@ const toTicket = (ticket: TicketRecord) => ({
               registration_number: ticket.booking.vehicle.registrationNumber,
             }
           : null,
+      }
+    : null,
+  ride: ticket.ride
+    ? {
+        id: ticket.ride.id,
+        reference: ticket.ride.reference,
+        service_type: ticket.ride.serviceType,
+        status: ticket.ride.status,
+        pickup_address: ticket.ride.pickupAddress,
+        dropoff_address: ticket.ride.dropoffAddress,
+        requested_at: ticket.ride.requestedAt,
+        estimated_fare: ticket.ride.estimatedFare,
+        final_fare: ticket.ride.finalFare,
+        payment_status: ticket.ride.paymentStatus,
       }
     : null,
 });
@@ -146,22 +181,28 @@ const createTicket = async (
     subject?: unknown;
     category?: unknown;
     booking_id?: unknown;
+    ride_id?: unknown;
     message?: unknown;
   },
   actor: Actor,
 ) => {
-  if (actor.role !== "customer")
-    throw appError("Only customers can open support requests", 403);
+  if (!["customer", "driver"].includes(actor.role))
+    throw appError("Only customers and drivers can open support requests", 403);
   const subject = text(input.subject, 160);
   const message = text(input.message);
   const category = text(input.category, 40) || "general";
   const bookingId = input.booking_id ? Number(input.booking_id) : null;
+  const rideId = input.ride_id ? Number(input.ride_id) : null;
   if (subject.length < 5)
     throw appError("Describe the issue in at least 5 characters", 400);
   if (message.length < 2)
     throw appError("Add a message for the support team", 400);
   if (!CATEGORIES.includes(category))
     throw appError("Invalid support category", 400);
+  if (actor.role === "driver" && bookingId)
+    throw appError("Drivers cannot attach customer rental bookings", 400);
+  if (bookingId && rideId)
+    throw appError("Choose either a vehicle booking or a ride", 400);
   if (bookingId) {
     const booking = await prisma.booking.findFirst({
       where: { id: bookingId, customerId: actor.id },
@@ -169,10 +210,28 @@ const createTicket = async (
     });
     if (!booking) throw appError("Booking not found for this account", 404);
   }
+  if (rideId) {
+    const ride = await prisma.ride.findFirst({
+      where: {
+        id: rideId,
+        ...(actor.role === "driver"
+          ? { driver: { is: { userId: actor.id } } }
+          : { passengerId: actor.id }),
+      },
+      select: { id: true },
+    });
+    if (!ride) throw appError("Ride not found for this account", 404);
+  }
 
   const ticket = await prisma.$transaction(async (tx) => {
     const created = await tx.supportTicket.create({
-      data: { customerId: actor.id, bookingId, subject, category },
+      data: {
+        customerId: actor.id,
+        bookingId,
+        rideId,
+        subject,
+        category,
+      },
     });
     await tx.supportMessage.create({
       data: { ticketId: created.id, senderId: actor.id, body: message },
@@ -213,8 +272,14 @@ const sendMessage = async (
   const ticket = await ensureTicketAccess(ticketId, actor);
   const body = text(bodyValue);
   if (body.length < 1) throw appError("Message cannot be empty", 400);
-  if (ticket.status === "closed")
-    throw appError("This conversation is closed", 400);
+  if (["resolved", "closed"].includes(ticket.status)) {
+    throw appError(
+      ticket.status === "resolved"
+        ? "Reopen this resolved request before sending another message"
+        : "This conversation is closed",
+      400,
+    );
+  }
   const status = actor.role === "admin" ? "waiting_customer" : "open";
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.supportMessage.create({
@@ -235,6 +300,22 @@ const sendMessage = async (
     return created;
   });
   return toMessage(message);
+};
+
+const reopenTicket = async (ticketId: number, actor: Actor) => {
+  if (!["customer", "driver"].includes(actor.role))
+    throw appError("Only request owners can reopen resolved requests", 403);
+  const ticket = await ensureTicketAccess(ticketId, actor);
+  if (ticket.status === "closed")
+    throw appError("Closed requests cannot be reopened", 400);
+  if (ticket.status !== "resolved")
+    throw appError("Only resolved requests can be reopened", 400);
+  const updated = await prisma.supportTicket.update({
+    where: { id: ticketId },
+    data: { status: "open", updatedAt: new Date() },
+    include: ticketInclude,
+  });
+  return toTicket(updated);
 };
 
 const getAdminTickets = async (query: QueryInput) => {
@@ -330,6 +411,7 @@ export const supportService = {
   createTicket,
   getConversation,
   sendMessage,
+  reopenTicket,
   getAdminTickets,
   updateTicket,
 };

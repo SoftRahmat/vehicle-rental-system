@@ -43,7 +43,7 @@ type Booking = {
   customer?: { name: string; email: string } | null;
 };
 
-type Actor = { id: number; role: "admin" | "customer" };
+type Actor = { id: number; role: "admin" | "customer" | "driver" };
 
 const bookingInclude = {
   vehicle: {

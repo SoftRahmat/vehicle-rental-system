@@ -10,3 +10,9 @@ paymentRouter.post(
   authGate.requireAuth,
   paymentController.createCheckoutSession,
 );
+paymentRouter.post(
+  "/rides/:rideId/checkout",
+  authGate.requireAuth,
+  authGate.requireAnyRole(["customer", "admin"]),
+  paymentController.createRideCheckoutSession,
+);

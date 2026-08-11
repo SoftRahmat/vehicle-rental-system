@@ -322,6 +322,65 @@ const getAllVehicles = async (
   return rows.map(rowToVehicle);
 };
 
+const getVehicleCatalog = async (query: Record<string, unknown>) => {
+  const positiveInteger = (value: unknown, fallback: number): number => {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  };
+  const stringValue = (value: unknown): string =>
+    typeof value === "string" ? value.trim() : "";
+  const page = positiveInteger(query.page, 1);
+  const pageSize = Math.min(positiveInteger(query.pageSize, 12), 48);
+  const search = stringValue(query.search).toLowerCase();
+  const type = stringValue(query.type).toLowerCase();
+  const availability = stringValue(query.availability);
+  const sort = stringValue(query.sort) || "recommended";
+  const startDate = stringValue(query.startDate) || undefined;
+  const endDate = stringValue(query.endDate) || undefined;
+  const isAvailable = (vehicle: Vehicle): boolean =>
+    vehicle.available_for_period ?? vehicle.availability_status === "available";
+
+  const fleet = await getAllVehicles(startDate, endDate);
+  const matching = fleet.filter(
+    (vehicle) =>
+      (!search ||
+        `${vehicle.vehicle_name} ${vehicle.registration_number} ${vehicle.type} ${vehicle.location ?? ""}`
+          .toLowerCase()
+          .includes(search)) &&
+      (!type || vehicle.type.toLowerCase() === type) &&
+      (!availability ||
+        (availability === "available") === isAvailable(vehicle)),
+  );
+  matching.sort((left, right) => {
+    if (sort === "price-asc")
+      return left.daily_rent_price - right.daily_rent_price;
+    if (sort === "price-desc")
+      return right.daily_rent_price - left.daily_rent_price;
+    if (sort === "name")
+      return left.vehicle_name.localeCompare(right.vehicle_name);
+    if (sort === "availability")
+      return Number(isAvailable(right)) - Number(isAvailable(left));
+    return (
+      Number(isAvailable(right)) - Number(isAvailable(left)) ||
+      Number(right.rating ?? 0) - Number(left.rating ?? 0) ||
+      left.id - right.id
+    );
+  });
+
+  const total = matching.length;
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+  const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages);
+  const offset = (safePage - 1) * pageSize;
+  return {
+    items: matching.slice(offset, offset + pageSize),
+    page: safePage,
+    pageSize,
+    total,
+    totalPages,
+    available: matching.filter(isAvailable).length,
+  };
+};
+
 const getVehicleById = async (vehicleId: number): Promise<Vehicle> => {
   const record = await prisma.vehicle.findUnique({
     where: { id: vehicleId },
@@ -394,6 +453,7 @@ const deleteVehicle = async (vehicleId: number): Promise<void> => {
 export const vehicleService = {
   createVehicle,
   getAllVehicles,
+  getVehicleCatalog,
   getVehicleById,
   updateVehicle,
   deleteVehicle,

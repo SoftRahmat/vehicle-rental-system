@@ -17,10 +17,21 @@ const config = {
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER,
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  googleMapsServerKey: process.env.GOOGLE_MAPS_SERVER_KEY,
   googleCallbackUrl:
     process.env.GOOGLE_CALLBACK_URL ??
     "http://localhost:5000/api/v1/auth/google/callback",
   nodeEnv: process.env.NODE_ENV ?? "development",
+  ridesCurrency: process.env.RIDES_CURRENCY ?? "MYR",
+  ridesCardAuthorizationBufferPercent: Number(
+    process.env.RIDES_CARD_AUTH_BUFFER_PERCENT ?? 25,
+  ),
+  ridesCardAuthorizationBufferMinimum: Number(
+    process.env.RIDES_CARD_AUTH_BUFFER_MINIMUM ?? 20,
+  ),
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY,
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY,
+  vapidSubject: process.env.VAPID_SUBJECT ?? "mailto:support@roadly.example",
 };
 
 export default config;

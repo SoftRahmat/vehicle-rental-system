@@ -18,6 +18,11 @@ model User {
   supportTickets    SupportTicket[]         @relation("SupportCustomer")
   assignedTickets   SupportTicket[]         @relation("SupportAssignee")
   supportMessages   SupportMessage[]
+  driverProfile     DriverProfile?
+  passengerRides    Ride[]                  @relation("RidePassenger")
+  rideStatusEvents  RideStatusEvent[]       @relation("RideEventActor")
+  rideNotifications RideNotification[]
+  pushSubscriptions PushSubscription[]
 
   @@index([createdAt(sort: Desc)], map: "idx_users_created_at")
   @@index([role], map: "idx_users_role")

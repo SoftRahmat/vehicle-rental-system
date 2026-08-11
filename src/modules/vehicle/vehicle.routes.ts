@@ -8,6 +8,7 @@ export const vehicleRouter = Router();
  * Public
  */
 vehicleRouter.get("/", vehicleController.getAllVehicles);
+vehicleRouter.get("/catalog", vehicleController.getVehicleCatalog);
 vehicleRouter.get(
   "/:vehicleId/availability",
   vehicleController.getAvailabilityQuote,

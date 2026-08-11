@@ -48,6 +48,15 @@ const sendMessage = asyncHandler(async (req: Request, res: Response) => {
   res.status(201).json({ success: true, message: "Message sent", data });
 });
 
+const reopenTicket = asyncHandler(async (req: Request, res: Response) => {
+  const data = await supportService.reopenTicket(ticketId(req), actor(req));
+  res.status(200).json({
+    success: true,
+    message: "Support request reopened",
+    data,
+  });
+});
+
 const getAdminTickets = asyncHandler(async (req: Request, res: Response) => {
   const data = await supportService.getAdminTickets(
     req.query as Record<string, unknown>,
@@ -74,6 +83,7 @@ export const supportController = {
   createTicket,
   getConversation,
   sendMessage,
+  reopenTicket,
   getAdminTickets,
   updateTicket,
 };

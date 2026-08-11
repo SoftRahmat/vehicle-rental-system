@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authGate } from "../../middleware/auth";
 import { adminController } from "./admin.controller";
 import { supportController } from "../support/support.controller";
+import { rideController } from "../ride/ride.controller";
 
 export const adminRouter = Router();
 
@@ -20,3 +21,10 @@ adminRouter.post(
   supportController.sendMessage,
 );
 adminRouter.patch("/support/tickets/:ticketId", supportController.updateTicket);
+adminRouter.get("/rides", rideController.adminRides);
+adminRouter.get("/drivers", rideController.drivers);
+adminRouter.post("/drivers", rideController.createDriver);
+adminRouter.patch("/drivers/:driverId", rideController.updateDriver);
+adminRouter.post("/rides/:rideId/assign", rideController.assignDriver);
+adminRouter.patch("/rides/:rideId/status", rideController.updateStatus);
+adminRouter.patch("/rides/:rideId/charges", rideController.adjustRideCharges);

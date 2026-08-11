@@ -44,8 +44,25 @@ const stripeWebhook = asyncHandler(async (req: Request, res: Response) => {
     .json({ success: true, message: "Webhook received", data: result });
 });
 
+const createRideCheckoutSession = asyncHandler(
+  async (req: Request, res: Response) => {
+    const result = await paymentService.createRideCheckoutSession(
+      Number(req.params["rideId"]),
+      req.user as AuthUser,
+    );
+    res
+      .status(201)
+      .json({
+        success: true,
+        message: "MYR ride checkout created",
+        data: result,
+      });
+  },
+);
+
 export const paymentController = {
   getIntegrationStatus,
   createCheckoutSession,
   stripeWebhook,
+  createRideCheckoutSession,
 };

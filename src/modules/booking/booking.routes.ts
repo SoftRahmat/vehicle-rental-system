@@ -12,6 +12,7 @@ bookingRouter.get("/options", bookingController.getRentalOptions);
 bookingRouter.post(
   "/",
   authGate.requireAuth,
+  authGate.requireAnyRole(["customer", "admin"]),
   authGate.requireVerifiedPhone,
   bookingController.createBooking,
 );
@@ -19,7 +20,12 @@ bookingRouter.post(
 /**
  * Get bookings (Admin sees all, Customer sees own)
  */
-bookingRouter.get("/", authGate.requireAuth, bookingController.getBookings);
+bookingRouter.get(
+  "/",
+  authGate.requireAuth,
+  authGate.requireAnyRole(["customer", "admin"]),
+  bookingController.getBookings,
+);
 
 /**
  * Update booking status (PUT /api/v1/bookings/:bookingId)
@@ -29,5 +35,6 @@ bookingRouter.get("/", authGate.requireAuth, bookingController.getBookings);
 bookingRouter.put(
   "/:bookingId",
   authGate.requireAuth,
+  authGate.requireAnyRole(["customer", "admin"]),
   bookingController.updateBooking,
 );

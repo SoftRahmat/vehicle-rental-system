@@ -9,7 +9,7 @@ The Angular client lives in the sibling `vehicle-rental-angular` repository.
 - Customer registration and sign-in with JWT authentication
 - Google OAuth sign-in with verified-email account linking and one-time code exchange
 - Twilio phone OTP onboarding required before customer booking creation
-- Customer and administrator roles
+- Customer, administrator, and dedicated driver roles
 - Vehicle creation, editing, deletion, date-range availability, imagery, specifications, location, and rating
 - Car, bike, van, and SUV fleet types
 - Booking creation with date, overlap, and availability validation
@@ -17,7 +17,17 @@ The Angular client lives in the sibling `vehicle-rental-angular` repository.
 - Administrator booking return workflow
 - Administrator user role changes and deletion controls
 - Paginated administrator endpoints with search, filtering, and sorting
-- Authenticated, booking-aware customer support conversations with an administrator inbox
+- Authenticated customer and driver support conversations linked to rental bookings or Roadly rides
+- Separate Roadly Rides product for immediate Bike, Car, and XL trips in Kuala Lumpur
+- Google Routes-backed distance and duration quotes with signed five-minute fare tokens
+- MYR fare rules stored in PostgreSQL and seeded per ride type
+- Driver portal with live GPS, online/offline controls, navigation, and controlled trip progression
+- Automatic nearest-driver matching with manual administrator dispatch fallback
+- Driver ride rejection with required structured reasons, permanent audit history, passenger/admin visibility, and automatic reassignment that excludes drivers who already rejected the ride
+- Socket.IO ride updates for passengers, drivers, and dispatchers
+- MYR card pre-authorization before dispatch, automatic final-fare capture, automatic waiting charges, driver-entered tolls, promotional discounts, receipts, and Web Push notifications
+- Cash rides are settled directly with the assigned driver and recorded as paid only after the driver confirms collection
+- Administrator toll corrections before completion, with waiting derived from arrival/start timestamps and the final fare locked at completion
 - Configurable CORS origin for the Angular frontend
 - Centralized JSON error responses
 - Version-controlled Prisma migrations with an existing-database baseline
@@ -57,6 +67,8 @@ FRONTEND_URL=http://localhost:4200
 GOOGLE_CLIENT_ID=replace-with-google-client-id
 GOOGLE_CLIENT_SECRET=replace-with-google-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:5000/api/v1/auth/google/callback
+GOOGLE_MAPS_SERVER_KEY=replace-with-google-routes-server-key
+RIDES_CURRENCY=MYR
 STRIPE_SECRET_KEY=sk_test_replace_me
 STRIPE_WEBHOOK_SECRET=whsec_replace_me
 RESEND_API_KEY=re_replace_me
@@ -64,6 +76,9 @@ EMAIL_FROM=Roadly <bookings@your-domain.example>
 TWILIO_ACCOUNT_SID=AC_replace_me
 TWILIO_AUTH_TOKEN=replace_me
 TWILIO_FROM_NUMBER=+15550000000
+VAPID_PUBLIC_KEY=replace-with-vapid-public-key
+VAPID_PRIVATE_KEY=replace-with-vapid-private-key
+VAPID_SUBJECT=mailto:support@your-domain.example
 ```
 
 Do not commit `.env`; it is intentionally ignored by Git.
@@ -164,25 +179,82 @@ Endpoint-specific filters include `type`, `status`, and `role`. Responses includ
 | ------ | ----------------------------------------------- | ---------------------- |
 | `GET`  | `/api/v1/payments/status`                       | Public                 |
 | `POST` | `/api/v1/payments/bookings/:bookingId/checkout` | Booking owner or admin |
+| `POST` | `/api/v1/payments/rides/:rideId/checkout`       | Ride owner or admin    |
 | `POST` | `/api/v1/payments/stripe/webhook`               | Stripe webhook         |
 
 ### Support
 
-| Method  | Endpoint                                           | Access        |
-| ------- | -------------------------------------------------- | ------------- |
-| `GET`   | `/api/v1/support/options`                          | Authenticated |
-| `GET`   | `/api/v1/support/tickets`                          | Authenticated |
-| `POST`  | `/api/v1/support/tickets`                          | Customer      |
-| `GET`   | `/api/v1/support/tickets/:ticketId`                | Ticket owner  |
-| `POST`  | `/api/v1/support/tickets/:ticketId/messages`       | Ticket owner  |
-| `GET`   | `/api/v1/admin/support/tickets`                    | Admin         |
-| `GET`   | `/api/v1/admin/support/tickets/:ticketId`          | Admin         |
-| `POST`  | `/api/v1/admin/support/tickets/:ticketId/messages` | Admin         |
-| `PATCH` | `/api/v1/admin/support/tickets/:ticketId`          | Admin         |
+| Method  | Endpoint                                           | Access             |
+| ------- | -------------------------------------------------- | ------------------ |
+| `GET`   | `/api/v1/support/options`                          | Authenticated      |
+| `GET`   | `/api/v1/support/tickets`                          | Authenticated      |
+| `POST`  | `/api/v1/support/tickets`                          | Customer or driver |
+| `GET`   | `/api/v1/support/tickets/:ticketId`                | Ticket owner       |
+| `POST`  | `/api/v1/support/tickets/:ticketId/messages`       | Ticket owner       |
+| `GET`   | `/api/v1/admin/support/tickets`                    | Admin              |
+| `GET`   | `/api/v1/admin/support/tickets/:ticketId`          | Admin              |
+| `POST`  | `/api/v1/admin/support/tickets/:ticketId/messages` | Admin              |
+| `PATCH` | `/api/v1/admin/support/tickets/:ticketId`          | Admin              |
 
-Support requests persist customer and administrator messages, may link to an owned booking, and support assignment, priority, read tracking, and lifecycle statuses. The Angular client refreshes active conversations automatically for a near-real-time inbox without exposing anonymous chat.
+Support requests persist customer, driver, and administrator messages; may link to an owned rental booking or Roadly ride; and support assignment, priority, read tracking, and lifecycle statuses. The Angular client refreshes active conversations automatically for a near-real-time inbox without exposing anonymous chat.
 
-Stripe Checkout activates only when `STRIPE_SECRET_KEY` is configured. Configure Stripe to send webhook events to `/api/v1/payments/stripe/webhook`. Resend and Twilio notifications activate only when their corresponding environment variables are present.
+### Roadly Rides
+
+| Method  | Endpoint                              | Access   | Description                            |
+| ------- | ------------------------------------- | -------- | -------------------------------------- |
+| `GET`   | `/api/v1/rides/options`               | Public   | KL service zone and MYR fare rules     |
+| `POST`  | `/api/v1/rides/quote`                 | Customer | Calculate a signed five-minute fare    |
+| `POST`  | `/api/v1/rides`                       | Customer | Request an immediate ride              |
+| `GET`   | `/api/v1/rides`                       | Customer | Current and previous rides             |
+| `POST`  | `/api/v1/rides/:rideId/cancel`        | Customer | Cancel an eligible ride                |
+| `GET`   | `/api/v1/admin/rides`                 | Admin    | Paginated dispatch queue               |
+| `GET`   | `/api/v1/admin/drivers`               | Admin    | Driver roster                          |
+| `POST`  | `/api/v1/admin/drivers`               | Admin    | Create a driver profile                |
+| `PATCH` | `/api/v1/admin/drivers/:driverId`     | Admin    | Change approval or availability        |
+| `POST`  | `/api/v1/admin/rides/:rideId/assign`  | Admin    | Manually assign a matching driver      |
+| `PATCH` | `/api/v1/admin/rides/:rideId/status`  | Admin    | Advance the controlled ride state      |
+| `PATCH` | `/api/v1/admin/rides/:rideId/charges` | Admin    | Correct toll charges before completion |
+
+The administrator ride list accepts comma-separated `status` values for grouped operational views and an optional `attention` filter. Supported attention values are `awaiting_card`, `driver_rejected`, and `cash_confirmation`. Responses include status-group counts for needs-action, active, completed, cancelled, and all-ride tabs.
+
+### Driver operations
+
+| Method  | Endpoint                              | Description                          |
+| ------- | ------------------------------------- | ------------------------------------ |
+| `GET`   | `/api/v1/driver/rides/profile`        | Retrieve the signed-in driver        |
+| `PATCH` | `/api/v1/driver/rides/availability`   | Go online or offline                 |
+| `PATCH` | `/api/v1/driver/rides/location`       | Publish the driver's GPS position    |
+| `GET`   | `/api/v1/driver/rides/active`         | Retrieve the assigned active ride    |
+| `POST`  | `/api/v1/driver/rides/:rideId/reject` | Reject and return a ride to dispatch |
+| `PATCH` | `/api/v1/driver/rides/:rideId/status` | Advance the trip safely              |
+
+Drivers may reject a ride while it is `driver_assigned` or `driver_arriving`. The request must contain one of the supported reasons:
+
+```json
+{
+  "reason": "not_available",
+  "details": "Optional context, required when reason is other"
+}
+```
+
+Supported values are `not_available`, `too_far`, and `other`. Selecting `other` requires details. Every rejection is stored with the ride, driver, reason, details, and timestamp. The rejecting driver is excluded from later assignment attempts for that ride. A `not_available` rejection also takes the driver offline; the other reasons leave the driver eligible for different rides.
+
+After rejection, the ride returns to `requested` and Roadly immediately attempts to assign the nearest eligible driver. Passenger, administrator, and newly assigned driver sessions receive the updated ride through Socket.IO. The passenger also receives an in-app/Web Push notification when enabled. If no replacement is currently available, the request remains visible in the administrator dispatch queue for manual assignment.
+
+### Ride notifications
+
+| Method  | Endpoint                                     | Description                     |
+| ------- | -------------------------------------------- | ------------------------------- |
+| `GET`   | `/api/v1/notifications/config`               | Retrieve public push capability |
+| `GET`   | `/api/v1/notifications`                      | List the user's notifications   |
+| `PATCH` | `/api/v1/notifications/:notificationId/read` | Mark a notification read        |
+| `POST`  | `/api/v1/notifications/push-subscriptions`   | Register a browser subscription |
+
+Roadly Rides is intentionally separate from daily vehicle rentals. It supports immediate bookings, nearest-driver matching, driver live location, and manual dispatch fallback in a 35 km Kuala Lumpur service radius. Configure `GOOGLE_MAPS_SERVER_KEY` with a key restricted to Google Routes API. Development falls back to a clearly identified local route estimate when the key is absent; production does not.
+
+Stripe Checkout activates only when `STRIPE_SECRET_KEY` is configured. Configure Stripe to send `checkout.session.completed` and `checkout.session.expired` events to `/api/v1/payments/stripe/webhook`. Generate VAPID keys with `npx web-push generate-vapid-keys` to enable opt-in browser notifications. Resend and Twilio notifications activate only when their corresponding environment variables are present.
+
+Card rides use separate authorization and capture. Checkout places a temporary hold for the estimated fare plus the greater of `RIDES_CARD_AUTH_BUFFER_PERCENT` or `RIDES_CARD_AUTH_BUFFER_MINIMUM`. Dispatch starts only after the authorization webhook succeeds. At completion, Roadly captures the exact final fare and Stripe releases the unused hold. Cash rides bypass Stripe and are marked paid only when the assigned driver confirms receipt.
 
 Google sign-in activates when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are configured. Register the exact `GOOGLE_CALLBACK_URL` as an authorized redirect URI in Google Cloud. Roadly links verified Google emails, stores Google's stable subject identifier, and redirects Angular with a short-lived one-time exchange code rather than an application token. Customers must verify an international-format phone number before creating a booking. In non-production environments without Twilio credentials, the OTP is returned only as `developmentCode` for local testing.
 
@@ -207,6 +279,7 @@ src/
     auth/       Registration and sign-in
     booking/    Rental lifecycle
     support/    Authenticated support conversations
+    ride/       Quotes, routing, ride lifecycle, drivers and dispatch
     user/       Account management
     vehicle/    Fleet management
   types/        Express type extensions
@@ -229,6 +302,7 @@ Roadly uses Prisma throughout its database layer:
 - Fleet availability, unavailable ranges, and alternative recommendations use Prisma TypedSQL so the optimized PostgreSQL behavior remains type-safe and version controlled.
 - The runtime connects through `@prisma/adapter-pg`; services do not create or use a separate legacy `pg` pool.
 - PostgreSQL check constraints and the partial unique Google-subject index remain explicitly preserved in migration SQL.
+- Driver rejection analytics are backed by `driver_ride_rejections`, with indexed ride/time and driver/reason/time access paths. This preserves complete rejection history for future operational reporting rather than overwriting a single reason on the ride.
 
 The existing Neon database was introspected and baseline migration `20260810053000_baseline_existing_database` was recorded as already applied. Do not run `prisma migrate reset` against shared or production data. For new schema changes, update the Prisma models, create a named development migration, review its SQL, and commit both schema and migration files.
 

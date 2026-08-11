@@ -17,7 +17,7 @@ type PublicUser = {
   name: string;
   email: string;
   phone: string | null;
-  role: "admin" | "customer";
+  role: "admin" | "customer" | "driver";
   avatar_url: string | null;
   auth_provider: string | null;
   email_verified: boolean;
@@ -55,7 +55,12 @@ const toPublicUser = (user: SelectedUser): PublicUser => ({
   name: user.name,
   email: user.email,
   phone: user.phone,
-  role: user.role === "admin" ? "admin" : "customer",
+  role:
+    user.role === "admin"
+      ? "admin"
+      : user.role === "driver"
+        ? "driver"
+        : "customer",
   avatar_url: user.avatarUrl,
   auth_provider: user.authProvider,
   email_verified: Boolean(user.emailVerified),
@@ -209,48 +214,47 @@ const exchangeGoogleProfile = async (code: string): Promise<GoogleProfile> => {
   return profile;
 };
 
-const linkGoogleUser = async (profile: GoogleProfile): Promise<number> =>
-  prisma.$transaction(async (transaction) => {
-    const normalizedEmail = profile.email.toLowerCase();
-    const existing = await transaction.user.findFirst({
-      where: {
-        OR: [{ googleSubject: profile.sub }, { email: normalizedEmail }],
-      },
-      select: { id: true, googleSubject: true },
-    });
-    if (!existing) {
-      const created = await transaction.user.create({
-        data: {
-          name:
-            profile.name || normalizedEmail.split("@")[0] || "Roadly customer",
-          email: normalizedEmail,
-          role: "customer",
-          googleSubject: profile.sub,
-          avatarUrl: profile.picture ?? null,
-          authProvider: "google",
-          emailVerified: true,
-        },
-        select: { id: true },
-      });
-      return created.id;
-    }
-    if (existing.googleSubject && existing.googleSubject !== profile.sub) {
-      throw appError(
-        "This email is already linked to another Google account",
-        409,
-      );
-    }
-    await transaction.user.update({
-      where: { id: existing.id },
-      data: {
-        googleSubject: profile.sub,
-        ...(profile.picture ? { avatarUrl: profile.picture } : {}),
-        emailVerified: true,
-        updatedAt: new Date(),
-      },
-    });
-    return existing.id;
+const linkGoogleUser = async (profile: GoogleProfile): Promise<number> => {
+  const normalizedEmail = profile.email.toLowerCase();
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [{ googleSubject: profile.sub }, { email: normalizedEmail }],
+    },
+    select: { id: true, googleSubject: true },
   });
+  if (!existing) {
+    const created = await prisma.user.create({
+      data: {
+        name:
+          profile.name || normalizedEmail.split("@")[0] || "Roadly customer",
+        email: normalizedEmail,
+        role: "customer",
+        googleSubject: profile.sub,
+        avatarUrl: profile.picture ?? null,
+        authProvider: "google",
+        emailVerified: true,
+      },
+      select: { id: true },
+    });
+    return created.id;
+  }
+  if (existing.googleSubject && existing.googleSubject !== profile.sub) {
+    throw appError(
+      "This email is already linked to another Google account",
+      409,
+    );
+  }
+  await prisma.user.update({
+    where: { id: existing.id },
+    data: {
+      googleSubject: profile.sub,
+      ...(profile.picture ? { avatarUrl: profile.picture } : {}),
+      emailVerified: true,
+      updatedAt: new Date(),
+    },
+  });
+  return existing.id;
+};
 
 const completeGoogleCallback = async (
   code: string,

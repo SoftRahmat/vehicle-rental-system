@@ -26,6 +26,17 @@ const getAllVehicles = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+const getVehicleCatalog = asyncHandler(async (req: Request, res: Response) => {
+  const data = await vehicleService.getVehicleCatalog(
+    req.query as Record<string, unknown>,
+  );
+  res.status(200).json({
+    success: true,
+    message: "Vehicle catalogue retrieved successfully",
+    data,
+  });
+});
+
 /**
  * GET /api/v1/vehicles/:vehicleId
  */
@@ -168,6 +179,7 @@ const deleteVehicle = asyncHandler(async (req: Request, res: Response) => {
 
 export const vehicleController = {
   getAllVehicles,
+  getVehicleCatalog,
   getVehicleById,
   createVehicle,
   updateVehicle,

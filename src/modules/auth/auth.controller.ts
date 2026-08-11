@@ -65,13 +65,11 @@ const googleCallback = asyncHandler(async (req: Request, res: Response) => {
 
 const exchangeGoogleCode = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.exchangeGoogleCode(req.body?.code);
-  res
-    .status(200)
-    .json({
-      success: true,
-      message: "Google sign-in successful",
-      data: result,
-    });
+  res.status(200).json({
+    success: true,
+    message: "Google sign-in successful",
+    data: result,
+  });
 });
 
 const sendPhoneCode = asyncHandler(async (req: Request, res: Response) => {
