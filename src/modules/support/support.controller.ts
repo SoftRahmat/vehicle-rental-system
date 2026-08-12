@@ -6,7 +6,10 @@ import { supportService } from "./support.service";
 const actor = (req: Request): AuthUser => req.user as AuthUser;
 const ticketId = (req: Request): number => Number(req.params["ticketId"]);
 
-const options = asyncHandler(async (_req: Request, res: Response) => {
+const options = asyncHandler(async (req: Request, res: Response) => {
+  const relatedReferences = await supportService.getRelatedReferences(
+    actor(req),
+  );
   res.status(200).json({
     success: true,
     message: "Support options retrieved",
@@ -14,6 +17,7 @@ const options = asyncHandler(async (_req: Request, res: Response) => {
       categories: supportService.categories,
       priorities: supportService.priorities,
       statuses: supportService.statuses,
+      related_references: relatedReferences,
     },
   });
 });

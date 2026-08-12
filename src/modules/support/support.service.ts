@@ -167,6 +167,93 @@ const ensureTicketAccess = async (ticketId: number, actor: Actor) => {
   return ticket;
 };
 
+const getRelatedReferences = async (actor: Actor) => {
+  if (actor.role === "driver") {
+    const driver = await prisma.driverProfile.findUnique({
+      where: { userId: actor.id },
+      select: { id: true },
+    });
+    if (!driver) return [];
+
+    const rides = await prisma.ride.findMany({
+      where: {
+        OR: [
+          { driverId: driver.id },
+          { rejections: { some: { driverId: driver.id } } },
+        ],
+      },
+      select: {
+        id: true,
+        reference: true,
+        pickupAddress: true,
+        dropoffAddress: true,
+        status: true,
+        requestedAt: true,
+      },
+      orderBy: { requestedAt: "desc" },
+      take: 50,
+    });
+
+    return rides.map((ride) => ({
+      type: "ride" as const,
+      id: ride.id,
+      reference: ride.reference,
+      label: `${ride.pickupAddress} to ${ride.dropoffAddress}`,
+      status: ride.status,
+      occurred_at: ride.requestedAt,
+    }));
+  }
+
+  const [bookings, rides] = await Promise.all([
+    prisma.booking.findMany({
+      where: { customerId: actor.id },
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        vehicle: { select: { vehicleName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+    prisma.ride.findMany({
+      where: { passengerId: actor.id },
+      select: {
+        id: true,
+        reference: true,
+        pickupAddress: true,
+        dropoffAddress: true,
+        status: true,
+        requestedAt: true,
+      },
+      orderBy: { requestedAt: "desc" },
+      take: 50,
+    }),
+  ]);
+
+  return [
+    ...bookings.map((booking) => ({
+      type: "booking" as const,
+      id: booking.id,
+      reference: `Booking #${booking.id}`,
+      label: booking.vehicle?.vehicleName ?? "Vehicle rental",
+      status: booking.status,
+      occurred_at: booking.createdAt,
+    })),
+    ...rides.map((ride) => ({
+      type: "ride" as const,
+      id: ride.id,
+      reference: ride.reference,
+      label: `${ride.pickupAddress} to ${ride.dropoffAddress}`,
+      status: ride.status,
+      occurred_at: ride.requestedAt,
+    })),
+  ].sort(
+    (left, right) =>
+      (right.occurred_at?.getTime() ?? 0) - (left.occurred_at?.getTime() ?? 0),
+  );
+};
+
 const getTickets = async (actor: Actor) => {
   const records = await prisma.supportTicket.findMany({
     ...(actor.role === "admin" ? {} : { where: { customerId: actor.id } }),
@@ -215,7 +302,16 @@ const createTicket = async (
       where: {
         id: rideId,
         ...(actor.role === "driver"
-          ? { driver: { is: { userId: actor.id } } }
+          ? {
+              OR: [
+                { driver: { is: { userId: actor.id } } },
+                {
+                  rejections: {
+                    some: { driver: { is: { userId: actor.id } } },
+                  },
+                },
+              ],
+            }
           : { passengerId: actor.id }),
       },
       select: { id: true },
@@ -407,6 +503,7 @@ export const supportService = {
   categories: CATEGORIES,
   priorities: PRIORITIES,
   statuses: STATUSES,
+  getRelatedReferences,
   getTickets,
   createTicket,
   getConversation,
