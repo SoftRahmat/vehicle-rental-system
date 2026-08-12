@@ -168,6 +168,14 @@ const driverActiveRide = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+const driverRideHistory = asyncHandler(async (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    message: "Driver trip history retrieved",
+    data: await rideService.driverRideHistory(req.query, req.user as AuthUser),
+  });
+});
+
 const updateDriverRideStatus = asyncHandler(
   async (req: Request, res: Response) => {
     let data = await rideService.updateDriverRideStatus(
@@ -215,6 +223,20 @@ const rejectDriverRide = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+const acceptDriverRide = asyncHandler(async (req: Request, res: Response) => {
+  const data = await rideService.acceptDriverRide(
+    Number(req.params["rideId"]),
+    req.user as AuthUser,
+  );
+  realtimeGateway.publishRide(data);
+  void rideNotificationService.notifyRideUpdate(data).catch(console.error);
+  res.json({
+    success: true,
+    message: "Ride accepted. Navigate to the pickup when ready",
+    data,
+  });
+});
+
 const adjustRideCharges = asyncHandler(async (req: Request, res: Response) => {
   const data = await rideService.adjustRideCharges(
     Number(req.params["rideId"]),
@@ -240,7 +262,9 @@ export const rideController = {
   updateDriverAvailability,
   updateDriverLocation,
   driverActiveRide,
+  driverRideHistory,
   updateDriverRideStatus,
   rejectDriverRide,
+  acceptDriverRide,
   adjustRideCharges,
 };

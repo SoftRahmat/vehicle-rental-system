@@ -260,14 +260,71 @@ const getUsers = async (
 };
 
 const getDashboardStats = async (): Promise<Record<string, number>> => {
-  const [vehicles, available, activeBookings, customers] =
-    await prisma.$transaction([
-      prisma.vehicle.count(),
-      prisma.vehicle.count({ where: { availabilityStatus: "available" } }),
-      prisma.booking.count({ where: { status: "active" } }),
-      prisma.user.count({ where: { role: "customer" } }),
-    ]);
-  return { vehicles, available, activeBookings, customers };
+  const driverPresenceCutoff = new Date(Date.now() - 5 * 60 * 1000);
+  const [
+    vehicles,
+    available,
+    activeBookings,
+    customers,
+    ridesNeedingAction,
+    activeTrips,
+    onlineDrivers,
+    pendingCompliance,
+    openSafetyIncidents,
+    pendingPayouts,
+    openSupportRequests,
+    flaggedFeedback,
+  ] = await prisma.$transaction([
+    prisma.vehicle.count(),
+    prisma.vehicle.count({ where: { availabilityStatus: "available" } }),
+    prisma.booking.count({ where: { status: "active" } }),
+    prisma.user.count({ where: { role: "customer" } }),
+    prisma.ride.count({ where: { status: "requested" } }),
+    prisma.ride.count({
+      where: {
+        status: {
+          in: [
+            "driver_assigned",
+            "driver_arriving",
+            "driver_arrived",
+            "in_progress",
+          ],
+        },
+      },
+    }),
+    prisma.driverProfile.count({
+      where: {
+        approvalStatus: "approved",
+        availability: { in: ["available", "on_trip"] },
+        lastLocationAt: { gte: driverPresenceCutoff },
+      },
+    }),
+    prisma.driverDocument.count({ where: { status: "pending" } }),
+    prisma.driverIncident.count({
+      where: { status: { in: ["open", "investigating"] } },
+    }),
+    prisma.driverPayout.count({
+      where: { status: { in: ["draft", "approved"] } },
+    }),
+    prisma.supportTicket.count({
+      where: { status: { in: ["open", "in_progress", "waiting_customer"] } },
+    }),
+    prisma.rideReview.count({ where: { moderationStatus: "under_review" } }),
+  ]);
+  return {
+    vehicles,
+    available,
+    activeBookings,
+    customers,
+    ridesNeedingAction,
+    activeTrips,
+    onlineDrivers,
+    pendingCompliance,
+    openSafetyIncidents,
+    pendingPayouts,
+    openSupportRequests,
+    flaggedFeedback,
+  };
 };
 
 export const adminService = {

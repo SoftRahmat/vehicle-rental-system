@@ -29,6 +29,8 @@ const config = {
   ridesCardAuthorizationBufferMinimum: Number(
     process.env.RIDES_CARD_AUTH_BUFFER_MINIMUM ?? 20,
   ),
+  driverCommissionPercent: Number(process.env.DRIVER_COMMISSION_PERCENT ?? 20),
+  rideOfferTimeoutSeconds: Number(process.env.RIDE_OFFER_TIMEOUT_SECONDS ?? 30),
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY,
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY,
   vapidSubject: process.env.VAPID_SUBJECT ?? "mailto:support@roadly.example",

@@ -11,6 +11,8 @@ import {
   type RideQuoteToken,
   type RideStatus,
 } from "./ride.types";
+import { driverEarningService } from "../driver-earning/driver-earning.service";
+import { driverSafetyService } from "../driver-safety/driver-safety.service";
 
 type Actor = { id: number; role: "admin" | "customer" | "driver" };
 const appError = (message: string, status: number) =>
@@ -42,6 +44,7 @@ const rideInclude = {
       driver: { include: { user: { select: { id: true, name: true } } } },
     },
   },
+  offers: { orderBy: { offeredAt: "desc" as const }, take: 1 },
 } as const satisfies Prisma.RideInclude;
 
 const publicOptions = async () => {
@@ -264,6 +267,10 @@ const cancelRide = async (rideId: number, reason: string, actor: Actor) => {
   const cancellationFee =
     ride.status === "requested" ? 0 : Number(fareRule?.cancellationFee ?? 0);
   return prisma.$transaction(async (tx) => {
+    await tx.rideOffer.updateMany({
+      where: { rideId: ride.id, status: "pending" },
+      data: { status: "cancelled", respondedAt: new Date() },
+    });
     if (ride.driverId) {
       await tx.driverProfile.update({
         where: { id: ride.driverId },
@@ -495,29 +502,87 @@ const assignDriver = async (rideId: number, driverId: number, actor?: Actor) =>
         "Driver vehicle does not match the requested ride type",
         400,
       );
-    await tx.driverProfile.update({
-      where: { id: driver.id },
+    const reserved = await tx.driverProfile.updateMany({
+      where: { id: driver.id, availability: "available" },
       data: { availability: "on_trip", updatedAt: new Date() },
     });
-    return tx.ride.update({
-      where: { id: ride.id },
+    if (reserved.count !== 1)
+      throw appError("Driver was assigned another ride", 409);
+    const assignedAt = new Date();
+    const expiresAt = new Date(
+      assignedAt.getTime() +
+        Math.max(10, config.rideOfferTimeoutSeconds) * 1000,
+    );
+    const claimed = await tx.ride.updateMany({
+      where: { id: ride.id, status: "requested", driverId: null },
       data: {
         driverId: driver.id,
         status: "driver_assigned",
-        assignedAt: new Date(),
+        assignedAt,
         updatedAt: new Date(),
-        events: {
-          create: {
-            actorId: actor?.id ?? null,
-            fromStatus: ride.status,
-            toStatus: "driver_assigned",
-            note: `Driver #${driver.id} assigned`,
-          },
-        },
       },
+    });
+    if (claimed.count !== 1)
+      throw appError("Ride was offered to another driver", 409);
+    await tx.rideOffer.create({
+      data: {
+        rideId: ride.id,
+        driverId: driver.id,
+        offeredAt: assignedAt,
+        expiresAt,
+      },
+    });
+    await tx.rideStatusEvent.create({
+      data: {
+        rideId: ride.id,
+        actorId: actor?.id ?? null,
+        fromStatus: ride.status,
+        toStatus: "driver_assigned",
+        note: `Ride offered to driver #${driver.id}`,
+      },
+    });
+    return tx.ride.findUniqueOrThrow({
+      where: { id: ride.id },
       include: rideInclude,
     });
   });
+
+const acceptDriverRide = async (rideId: number, actor: Actor) => {
+  const profile = await driverProfile(actor);
+  return prisma.$transaction(async (tx) => {
+    const offer = await tx.rideOffer.findFirst({
+      where: { rideId, driverId: profile.id },
+      orderBy: { offeredAt: "desc" },
+    });
+    if (!offer || offer.status !== "pending")
+      throw appError("This ride offer is no longer available", 409);
+    const now = new Date();
+    if (offer.expiresAt <= now) throw appError("This ride offer expired", 409);
+    const accepted = await tx.rideOffer.updateMany({
+      where: { id: offer.id, status: "pending", expiresAt: { gt: now } },
+      data: {
+        status: "accepted",
+        respondedAt: now,
+        responseMs: now.getTime() - offer.offeredAt.getTime(),
+      },
+    });
+    if (accepted.count !== 1)
+      throw appError("This ride offer was already handled", 409);
+    await tx.rideStatusEvent.create({
+      data: {
+        rideId,
+        actorId: actor.id,
+        fromStatus: "driver_assigned",
+        toStatus: "driver_assigned",
+        note: "Driver accepted ride offer",
+      },
+    });
+    return tx.ride.findUniqueOrThrow({
+      where: { id: rideId },
+      include: rideInclude,
+    });
+  });
+};
 
 const distanceKm = (
   from: { lat: number; lng: number },
@@ -570,6 +635,68 @@ const autoAssignRide = async (rideId: number) => {
   } catch {
     return null;
   }
+};
+
+const expireRideOffers = async () => {
+  const expired = await prisma.rideOffer.findMany({
+    where: { status: "pending", expiresAt: { lte: new Date() } },
+    select: { id: true, rideId: true, driverId: true },
+    take: 50,
+  });
+  const results = [];
+  for (const offer of expired) {
+    const released = await prisma.$transaction(async (tx) => {
+      const changed = await tx.rideOffer.updateMany({
+        where: {
+          id: offer.id,
+          status: "pending",
+          expiresAt: { lte: new Date() },
+        },
+        data: { status: "expired", respondedAt: new Date() },
+      });
+      if (!changed.count) return null;
+      await tx.driverRideRejection.create({
+        data: {
+          rideId: offer.rideId,
+          driverId: offer.driverId,
+          reason: "not_available",
+          details: "Ride offer expired",
+        },
+      });
+      await tx.driverProfile.updateMany({
+        where: { id: offer.driverId, availability: "on_trip" },
+        data: { availability: "available", updatedAt: new Date() },
+      });
+      await tx.ride.updateMany({
+        where: {
+          id: offer.rideId,
+          driverId: offer.driverId,
+          status: "driver_assigned",
+        },
+        data: {
+          driverId: null,
+          status: "requested",
+          assignedAt: null,
+          updatedAt: new Date(),
+        },
+      });
+      await tx.rideStatusEvent.create({
+        data: {
+          rideId: offer.rideId,
+          fromStatus: "driver_assigned",
+          toStatus: "requested",
+          note: "Driver offer expired; finding another driver",
+        },
+      });
+      return tx.ride.findUnique({
+        where: { id: offer.rideId },
+        include: rideInclude,
+      });
+    });
+    if (released)
+      results.push((await autoAssignRide(offer.rideId)) ?? released);
+  }
+  return results;
 };
 
 const updateStatus = async (
@@ -800,14 +927,43 @@ const updateDriverAvailability = async (availability: string, actor: Actor) => {
   const profile = await driverProfile(actor);
   if (profile.approvalStatus !== "approved")
     throw appError("Driver account is not approved", 403);
+  if (availability === "available") {
+    if (profile.riskStatus === "suspended")
+      throw appError(
+        profile.suspensionReason || "Driver account is suspended",
+        403,
+      );
+    const eligibility = await driverSafetyService.compliance(profile.id);
+    if (!eligibility.eligible)
+      throw appError(
+        `Compliance required: ${eligibility.missingOrInvalid.join(", ").replaceAll("_", " ")}`,
+        403,
+      );
+  }
   if (!["offline", "available"].includes(availability))
     throw appError("Choose available or offline", 400);
   if (profile.availability === "on_trip")
     throw appError("Complete the active ride before going offline", 400);
-  return prisma.driverProfile.update({
-    where: { id: profile.id },
-    data: { availability, updatedAt: new Date() },
-    include: { user: true },
+  return prisma.$transaction(async (tx) => {
+    if (availability === "available") {
+      const openShift = await tx.driverShift.findFirst({
+        where: { driverId: profile.id, endedAt: null },
+      });
+      if (!openShift)
+        await tx.driverShift.create({
+          data: { driverId: profile.id, startedAt: new Date() },
+        });
+    } else {
+      await tx.driverShift.updateMany({
+        where: { driverId: profile.id, endedAt: null },
+        data: { endedAt: new Date() },
+      });
+    }
+    return tx.driverProfile.update({
+      where: { id: profile.id },
+      data: { availability, updatedAt: new Date() },
+      include: { user: true },
+    });
   });
 };
 
@@ -843,6 +999,99 @@ const driverActiveRide = async (actor: Actor) => {
   });
 };
 
+const driverRideHistory = async (
+  query: {
+    page?: unknown;
+    pageSize?: unknown;
+    search?: unknown;
+    status?: unknown;
+    serviceType?: unknown;
+    paymentMethod?: unknown;
+    from?: unknown;
+    to?: unknown;
+    sortBy?: unknown;
+    sortOrder?: unknown;
+  },
+  actor: Actor,
+) => {
+  const profile = await driverProfile(actor);
+  const page = Math.max(1, Number(query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 15));
+  const search = String(query.search ?? "")
+    .trim()
+    .slice(0, 120);
+  const status = String(query.status ?? "").trim();
+  const serviceType = String(query.serviceType ?? "").trim();
+  const paymentMethod = String(query.paymentMethod ?? "").trim();
+  const from = query.from ? new Date(String(query.from)) : null;
+  const to = query.to ? new Date(String(query.to)) : null;
+  if (from && Number.isNaN(from.getTime()))
+    throw appError("Enter a valid start date", 400);
+  if (to && Number.isNaN(to.getTime()))
+    throw appError("Enter a valid end date", 400);
+  if (to) to.setHours(23, 59, 59, 999);
+
+  const where: Prisma.RideWhereInput = {
+    driverId: profile.id,
+    ...(status ? { status } : {}),
+    ...(serviceType ? { serviceType } : {}),
+    ...(paymentMethod ? { paymentMethod } : {}),
+    ...(from || to
+      ? {
+          requestedAt: {
+            ...(from ? { gte: from } : {}),
+            ...(to ? { lte: to } : {}),
+          },
+        }
+      : {}),
+    ...(search
+      ? {
+          OR: [
+            { reference: { contains: search, mode: "insensitive" } },
+            { pickupAddress: { contains: search, mode: "insensitive" } },
+            { dropoffAddress: { contains: search, mode: "insensitive" } },
+            {
+              passenger: {
+                name: { contains: search, mode: "insensitive" },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+  const sortFields = {
+    requestedAt: "requestedAt",
+    reference: "reference",
+    status: "status",
+    serviceType: "serviceType",
+    finalFare: "finalFare",
+  } as const;
+  const requestedSort = String(
+    query.sortBy ?? "requestedAt",
+  ) as keyof typeof sortFields;
+  const sortBy = sortFields[requestedSort] ?? "requestedAt";
+  const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
+
+  const [items, total] = await prisma.$transaction([
+    prisma.ride.findMany({
+      where,
+      include: rideInclude,
+      orderBy: { [sortBy]: sortOrder },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.ride.count({ where }),
+  ]);
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+};
+
 const updateDriverRideStatus = async (
   rideId: number,
   status: RideStatus,
@@ -856,13 +1105,32 @@ const updateDriverRideStatus = async (
   });
   if (!ride || ride.driverId !== profile.id)
     throw appError("Ride not found", 404);
+  const acceptedOffer = await prisma.rideOffer.findFirst({
+    where: { rideId, driverId: profile.id, status: "accepted" },
+    orderBy: { offeredAt: "desc" },
+  });
+  if (!acceptedOffer)
+    throw appError("Accept this ride before starting the trip", 409);
   if (
     !["driver_arriving", "driver_arrived", "in_progress", "completed"].includes(
       status,
     )
   )
     throw appError("Drivers cannot apply this status", 403);
-  return updateStatus(rideId, status, "Updated by driver", actor, payload);
+  const updated = await updateStatus(
+    rideId,
+    status,
+    "Updated by driver",
+    actor,
+    payload,
+  );
+  if (
+    updated.status === "completed" &&
+    updated.paymentStatus === "cash_collected"
+  ) {
+    await driverEarningService.syncRideEarning(updated.id);
+  }
+  return updated;
 };
 
 const rejectDriverRide = async (
@@ -899,6 +1167,20 @@ const rejectDriverRide = async (
         details: details || null,
       },
     });
+    const now = new Date();
+    const latestOffer = await tx.rideOffer.findFirst({
+      where: { rideId, driverId: profile.id },
+      orderBy: { offeredAt: "desc" },
+    });
+    if (latestOffer?.status === "pending")
+      await tx.rideOffer.update({
+        where: { id: latestOffer.id },
+        data: {
+          status: "rejected",
+          respondedAt: now,
+          responseMs: now.getTime() - latestOffer.offeredAt.getTime(),
+        },
+      });
     await tx.driverProfile.update({
       where: { id: profile.id },
       data: {
@@ -988,8 +1270,11 @@ export const rideService = {
   updateDriverAvailability,
   updateDriverLocation,
   driverActiveRide,
+  driverRideHistory,
   updateDriverRideStatus,
   rejectDriverRide,
+  acceptDriverRide,
+  expireRideOffers,
   adjustRideCharges,
   activateAuthorizedRide: autoAssignRide,
 };

@@ -34,29 +34,63 @@ model RideFareRule {
 }
 
 model DriverProfile {
-  id             Int                   @id @default(autoincrement())
-  userId         Int                   @unique @map("user_id")
-  approvalStatus String                @default("pending") @map("approval_status") @db.VarChar(20)
-  availability   String                @default("offline") @db.VarChar(20)
-  serviceType    String                @map("service_type") @db.VarChar(20)
-  licenseNumber  String                @unique @map("license_number") @db.VarChar(80)
-  vehicleMake    String                @map("vehicle_make") @db.VarChar(80)
-  vehicleModel   String                @map("vehicle_model") @db.VarChar(80)
-  vehiclePlate   String                @unique @map("vehicle_plate") @db.VarChar(30)
-  vehicleColor   String                @map("vehicle_color") @db.VarChar(40)
-  seats          Int
-  rating         Decimal               @default(5) @db.Decimal(3, 2)
-  currentLat     Decimal?              @map("current_lat") @db.Decimal(9, 6)
-  currentLng     Decimal?              @map("current_lng") @db.Decimal(9, 6)
-  lastLocationAt DateTime?             @map("last_location_at") @db.Timestamp(6)
-  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt      DateTime              @default(now()) @map("updated_at") @db.Timestamp(6)
-  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  rides          Ride[]
-  rideRejections DriverRideRejection[]
+  id               Int                   @id @default(autoincrement())
+  userId           Int                   @unique @map("user_id")
+  approvalStatus   String                @default("pending") @map("approval_status") @db.VarChar(20)
+  availability     String                @default("offline") @db.VarChar(20)
+  serviceType      String                @map("service_type") @db.VarChar(20)
+  licenseNumber    String                @unique @map("license_number") @db.VarChar(80)
+  vehicleMake      String                @map("vehicle_make") @db.VarChar(80)
+  vehicleModel     String                @map("vehicle_model") @db.VarChar(80)
+  vehiclePlate     String                @unique @map("vehicle_plate") @db.VarChar(30)
+  vehicleColor     String                @map("vehicle_color") @db.VarChar(40)
+  seats            Int
+  rating           Decimal               @default(5) @db.Decimal(3, 2)
+  currentLat       Decimal?              @map("current_lat") @db.Decimal(9, 6)
+  currentLng       Decimal?              @map("current_lng") @db.Decimal(9, 6)
+  lastLocationAt   DateTime?             @map("last_location_at") @db.Timestamp(6)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime              @default(now()) @map("updated_at") @db.Timestamp(6)
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  rides            Ride[]
+  rideRejections   DriverRideRejection[]
+  reviews          RideReview[]
+  earnings         DriverEarning[]
+  payouts          DriverPayout[]
+  adjustments      DriverAdjustment[]
+  documents        DriverDocument[]
+  incidents        DriverIncident[]
+  shifts           DriverShift[]
+  riskActions      DriverRiskAction[]
+  rideOffers       RideOffer[]
+  riskStatus       String                @default("clear") @map("risk_status") @db.VarChar(20)
+  suspensionReason String?               @map("suspension_reason") @db.VarChar(500)
+  suspendedAt      DateTime?             @map("suspended_at") @db.Timestamp(6)
 
   @@index([approvalStatus, availability, serviceType], map: "idx_driver_dispatch")
   @@map("driver_profiles")
+}
+
+model DriverDocument {
+  id              Int           @id @default(autoincrement())
+  driverId        Int           @map("driver_id")
+  type            String        @db.VarChar(30)
+  documentNumber  String?       @map("document_number") @db.VarChar(100)
+  documentUrl     String        @map("document_url") @db.VarChar(500)
+  issuedAt        DateTime?     @map("issued_at") @db.Date
+  expiresAt       DateTime?     @map("expires_at") @db.Date
+  status          String        @default("pending") @db.VarChar(20)
+  rejectionReason String?       @map("rejection_reason") @db.VarChar(500)
+  reviewedById    Int?          @map("reviewed_by_id")
+  reviewedAt      DateTime?     @map("reviewed_at") @db.Timestamp(6)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime      @default(now()) @map("updated_at") @db.Timestamp(6)
+  driver          DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  reviewedBy      User?         @relation("DriverDocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([driverId, type], map: "driver_documents_driver_type_key")
+  @@index([status, expiresAt], map: "idx_driver_documents_review_expiry")
+  @@map("driver_documents")
 }
 
 model Ride {
@@ -106,11 +140,192 @@ model Ride {
   payments           RidePayment[]
   supportTickets     SupportTicket[]
   rejections         DriverRideRejection[]
+  review             RideReview?
+  earning            DriverEarning?
+  incidents          DriverIncident[]
+  offers             RideOffer[]
 
   @@index([passengerId, requestedAt(sort: Desc)], map: "idx_rides_passenger")
   @@index([driverId, status], map: "idx_rides_driver_status")
   @@index([status, requestedAt], map: "idx_rides_dispatch_queue")
   @@map("rides")
+}
+
+model RideOffer {
+  id          Int           @id @default(autoincrement())
+  rideId      Int           @map("ride_id")
+  driverId    Int           @map("driver_id")
+  status      String        @default("pending") @db.VarChar(20)
+  offeredAt   DateTime      @default(now()) @map("offered_at") @db.Timestamp(6)
+  expiresAt   DateTime      @map("expires_at") @db.Timestamp(6)
+  respondedAt DateTime?     @map("responded_at") @db.Timestamp(6)
+  responseMs  Int?          @map("response_ms")
+  ride        Ride          @relation(fields: [rideId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  driver      DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([status, expiresAt], map: "idx_ride_offers_expiry")
+  @@index([driverId, status, offeredAt(sort: Desc)], map: "idx_ride_offers_driver")
+  @@index([rideId, offeredAt(sort: Desc)], map: "idx_ride_offers_ride")
+  @@map("ride_offers")
+}
+
+model DriverIncident {
+  id             Int           @id @default(autoincrement())
+  reference      String        @unique @db.VarChar(30)
+  driverId       Int           @map("driver_id")
+  rideId         Int?          @map("ride_id")
+  category       String        @db.VarChar(30)
+  priority       String        @default("normal") @db.VarChar(20)
+  description    String        @db.VarChar(2000)
+  evidenceUrls   Json          @default("[]") @map("evidence_urls")
+  status         String        @default("open") @db.VarChar(30)
+  assignedToId   Int?          @map("assigned_to_id")
+  resolutionNote String?       @map("resolution_note") @db.VarChar(2000)
+  resolvedById   Int?          @map("resolved_by_id")
+  resolvedAt     DateTime?     @map("resolved_at") @db.Timestamp(6)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime      @default(now()) @map("updated_at") @db.Timestamp(6)
+  driver         DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ride           Ride?         @relation(fields: [rideId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  assignedTo     User?         @relation("IncidentAssignee", fields: [assignedToId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  resolvedBy     User?         @relation("IncidentResolver", fields: [resolvedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([status, priority, createdAt(sort: Desc)], map: "idx_driver_incidents_queue")
+  @@index([driverId, createdAt(sort: Desc)], map: "idx_driver_incidents_driver")
+  @@map("driver_incidents")
+}
+
+model DriverShift {
+  id        Int           @id @default(autoincrement())
+  driverId  Int           @map("driver_id")
+  startedAt DateTime      @map("started_at") @db.Timestamp(6)
+  endedAt   DateTime?     @map("ended_at") @db.Timestamp(6)
+  driver    DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([driverId, startedAt(sort: Desc)], map: "idx_driver_shifts_driver")
+  @@map("driver_shifts")
+}
+
+model DriverRiskAction {
+  id          Int           @id @default(autoincrement())
+  driverId    Int           @map("driver_id")
+  action      String        @db.VarChar(30)
+  reason      String        @db.VarChar(500)
+  createdById Int           @map("created_by_id")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  driver      DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdBy   User          @relation("RiskActionAdmin", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([driverId, createdAt(sort: Desc)], map: "idx_driver_risk_actions_driver")
+  @@map("driver_risk_actions")
+}
+
+model RideReview {
+  id               Int           @id @default(autoincrement())
+  rideId           Int           @unique @map("ride_id")
+  passengerId      Int           @map("passenger_id")
+  driverId         Int           @map("driver_id")
+  rating           Int
+  comment          String?       @db.VarChar(1000)
+  tags             Json          @default("[]")
+  moderationStatus String        @default("visible") @map("moderation_status") @db.VarChar(30)
+  flagReason       String?       @map("flag_reason") @db.VarChar(120)
+  moderationNote   String?       @map("moderation_note") @db.VarChar(1000)
+  moderatedById    Int?          @map("moderated_by_id")
+  moderatedAt      DateTime?     @map("moderated_at") @db.Timestamp(6)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime      @default(now()) @map("updated_at") @db.Timestamp(6)
+  ride             Ride          @relation(fields: [rideId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  passenger        User          @relation("ReviewPassenger", fields: [passengerId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  driver           DriverProfile @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  moderatedBy      User?         @relation("ReviewModerator", fields: [moderatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([driverId, createdAt(sort: Desc)], map: "idx_ride_reviews_driver")
+  @@index([moderationStatus, createdAt(sort: Desc)], map: "idx_ride_reviews_moderation")
+  @@map("ride_reviews")
+}
+
+model DriverEarning {
+  id                 Int                @id @default(autoincrement())
+  rideId             Int                @unique @map("ride_id")
+  driverId           Int                @map("driver_id")
+  currency           String             @default("MYR") @db.VarChar(3)
+  grossFare          Decimal            @map("gross_fare") @db.Decimal(10, 2)
+  commissionRate     Decimal            @map("commission_rate") @db.Decimal(5, 2)
+  platformCommission Decimal            @map("platform_commission") @db.Decimal(10, 2)
+  tollReimbursement  Decimal            @default(0) @map("toll_reimbursement") @db.Decimal(10, 2)
+  adjustmentAmount   Decimal            @default(0) @map("adjustment_amount") @db.Decimal(10, 2)
+  netEarning         Decimal            @map("net_earning") @db.Decimal(10, 2)
+  settlementMethod   String             @map("settlement_method") @db.VarChar(30)
+  settlementStatus   String             @map("settlement_status") @db.VarChar(30)
+  earnedAt           DateTime           @map("earned_at") @db.Timestamp(6)
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt          DateTime           @default(now()) @map("updated_at") @db.Timestamp(6)
+  ride               Ride               @relation(fields: [rideId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  driver             DriverProfile      @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  payoutItem         DriverPayoutItem?
+  adjustments        DriverAdjustment[]
+
+  @@index([driverId, settlementStatus, earnedAt(sort: Desc)], map: "idx_driver_earnings_settlement")
+  @@map("driver_earnings")
+}
+
+model DriverPayout {
+  id               Int                @id @default(autoincrement())
+  reference        String             @unique @db.VarChar(30)
+  driverId         Int                @map("driver_id")
+  periodStart      DateTime           @map("period_start") @db.Date
+  periodEnd        DateTime           @map("period_end") @db.Date
+  currency         String             @default("MYR") @db.VarChar(3)
+  grossEarnings    Decimal            @map("gross_earnings") @db.Decimal(10, 2)
+  commissionAmount Decimal            @map("commission_amount") @db.Decimal(10, 2)
+  adjustmentAmount Decimal            @default(0) @map("adjustment_amount") @db.Decimal(10, 2)
+  netAmount        Decimal            @map("net_amount") @db.Decimal(10, 2)
+  status           String             @default("draft") @db.VarChar(30)
+  paymentReference String?            @map("payment_reference") @db.VarChar(120)
+  approvedById     Int?               @map("approved_by_id")
+  approvedAt       DateTime?          @map("approved_at") @db.Timestamp(6)
+  paidAt           DateTime?          @map("paid_at") @db.Timestamp(6)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime           @default(now()) @map("updated_at") @db.Timestamp(6)
+  driver           DriverProfile      @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  approvedBy       User?              @relation("PayoutApprover", fields: [approvedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  items            DriverPayoutItem[]
+  adjustments      DriverAdjustment[]
+
+  @@index([driverId, status, createdAt(sort: Desc)], map: "idx_driver_payouts_status")
+  @@map("driver_payouts")
+}
+
+model DriverPayoutItem {
+  id        Int           @id @default(autoincrement())
+  payoutId  Int           @map("payout_id")
+  earningId Int           @unique @map("earning_id")
+  amount    Decimal       @db.Decimal(10, 2)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  payout    DriverPayout  @relation(fields: [payoutId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  earning   DriverEarning @relation(fields: [earningId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([payoutId], map: "idx_driver_payout_items_payout")
+  @@map("driver_payout_items")
+}
+
+model DriverAdjustment {
+  id          Int            @id @default(autoincrement())
+  driverId    Int            @map("driver_id")
+  earningId   Int?           @map("earning_id")
+  payoutId    Int?           @map("payout_id")
+  amount      Decimal        @db.Decimal(10, 2)
+  reason      String         @db.VarChar(240)
+  createdById Int            @map("created_by_id")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
+  driver      DriverProfile  @relation(fields: [driverId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  earning     DriverEarning? @relation(fields: [earningId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  payout      DriverPayout?  @relation(fields: [payoutId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdBy   User           @relation("AdjustmentCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([driverId, createdAt(sort: Desc)], map: "idx_driver_adjustments_driver")
+  @@map("driver_adjustments")
 }
 
 model DriverRideRejection {

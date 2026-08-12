@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { rideNotificationService } from "../ride-notification/ride-notification.service";
 import { rideService } from "../ride/ride.service";
 import { realtimeGateway } from "../realtime/realtime.gateway";
+import { driverEarningService } from "../driver-earning/driver-earning.service";
 
 type Actor = { id: number; role: "admin" | "customer" | "driver" };
 
@@ -389,6 +390,7 @@ const captureAuthorizedRidePayment = async (rideId: number) => {
         data: { paymentStatus: "paid", updatedAt: new Date() },
       }),
     ]);
+    await driverEarningService.syncRideEarning(rideId);
     void rideNotificationService.sendRideReceipt(rideId).catch(console.error);
     return "paid";
   } catch (error) {

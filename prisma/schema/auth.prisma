@@ -1,28 +1,36 @@
 model User {
-  id                Int                     @id @default(autoincrement())
-  name              String                  @db.VarChar(100)
-  role              String                  @default("customer") @db.VarChar(50)
-  email             String                  @unique @db.VarChar(150)
-  password          String?
-  phone             String?                 @db.VarChar(16)
-  createdAt         DateTime?               @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt         DateTime?               @default(now()) @map("updated_at") @db.Timestamp(6)
-  googleSubject     String?                 @map("google_subject")
-  avatarUrl         String?                 @map("avatar_url")
-  authProvider      String?                 @default("password") @map("auth_provider") @db.VarChar(30)
-  emailVerified     Boolean?                @default(false) @map("email_verified")
-  phoneVerifiedAt   DateTime?               @map("phone_verified_at") @db.Timestamp(6)
-  exchangeCodes     AuthExchangeCode[]
-  bookings          Booking[]
-  verificationCodes PhoneVerificationCode[]
-  supportTickets    SupportTicket[]         @relation("SupportCustomer")
-  assignedTickets   SupportTicket[]         @relation("SupportAssignee")
-  supportMessages   SupportMessage[]
-  driverProfile     DriverProfile?
-  passengerRides    Ride[]                  @relation("RidePassenger")
-  rideStatusEvents  RideStatusEvent[]       @relation("RideEventActor")
-  rideNotifications RideNotification[]
-  pushSubscriptions PushSubscription[]
+  id                      Int                     @id @default(autoincrement())
+  name                    String                  @db.VarChar(100)
+  role                    String                  @default("customer") @db.VarChar(50)
+  email                   String                  @unique @db.VarChar(150)
+  password                String?
+  phone                   String?                 @db.VarChar(16)
+  createdAt               DateTime?               @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt               DateTime?               @default(now()) @map("updated_at") @db.Timestamp(6)
+  googleSubject           String?                 @map("google_subject")
+  avatarUrl               String?                 @map("avatar_url")
+  authProvider            String?                 @default("password") @map("auth_provider") @db.VarChar(30)
+  emailVerified           Boolean?                @default(false) @map("email_verified")
+  phoneVerifiedAt         DateTime?               @map("phone_verified_at") @db.Timestamp(6)
+  exchangeCodes           AuthExchangeCode[]
+  bookings                Booking[]
+  verificationCodes       PhoneVerificationCode[]
+  supportTickets          SupportTicket[]         @relation("SupportCustomer")
+  assignedTickets         SupportTicket[]         @relation("SupportAssignee")
+  supportMessages         SupportMessage[]
+  driverProfile           DriverProfile?
+  passengerRides          Ride[]                  @relation("RidePassenger")
+  rideStatusEvents        RideStatusEvent[]       @relation("RideEventActor")
+  rideNotifications       RideNotification[]
+  pushSubscriptions       PushSubscription[]
+  rideReviews             RideReview[]            @relation("ReviewPassenger")
+  moderatedReviews        RideReview[]            @relation("ReviewModerator")
+  approvedPayouts         DriverPayout[]          @relation("PayoutApprover")
+  driverAdjustments       DriverAdjustment[]      @relation("AdjustmentCreator")
+  reviewedDriverDocuments DriverDocument[]        @relation("DriverDocumentReviewer")
+  assignedDriverIncidents DriverIncident[]        @relation("IncidentAssignee")
+  resolvedDriverIncidents DriverIncident[]        @relation("IncidentResolver")
+  driverRiskActions       DriverRiskAction[]      @relation("RiskActionAdmin")
 
   @@index([createdAt(sort: Desc)], map: "idx_users_created_at")
   @@index([role], map: "idx_users_role")
