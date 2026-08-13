@@ -13,6 +13,7 @@ import {
 } from "./ride.types";
 import { driverEarningService } from "../driver-earning/driver-earning.service";
 import { driverSafetyService } from "../driver-safety/driver-safety.service";
+import { currencyService } from "../currency/currency.service";
 
 type Actor = { id: number; role: "admin" | "customer" | "driver" };
 const appError = (message: string, status: number) =>
@@ -143,6 +144,11 @@ const quote = async (payload: RideQuoteRequest, actor: Actor) => {
     Number(rule.minimumFare),
     money(subtotal - discountAmount),
   );
+  const currencySnapshot = await currencyService.transactionSnapshot(
+    estimatedFare,
+    rule.currency,
+    payload.displayCurrency,
+  );
   const tokenPayload: RideQuoteToken = {
     purpose: "ride_quote",
     passengerId: actor.id,
@@ -161,6 +167,11 @@ const quote = async (payload: RideQuoteRequest, actor: Actor) => {
     estimatedFare,
     routingProvider: route.provider,
     paymentMethod: payload.paymentMethod === "cash" ? "cash" : "card",
+    displayCurrency: currencySnapshot.displayCurrency,
+    exchangeRate: currencySnapshot.exchangeRate,
+    displayEstimatedFare: currencySnapshot.displayAmount,
+    exchangeRateSource: currencySnapshot.exchangeRateSource,
+    exchangeRateCapturedAt: currencySnapshot.exchangeRateCapturedAt.toISOString(),
   };
   const quoteToken = jwt.sign(tokenPayload, config.jwtSecret as string, {
     expiresIn: "5m",
@@ -212,6 +223,11 @@ const createRide = async (quoteToken: string, actor: Actor) => {
       distanceMeters: quoteData.distanceMeters,
       durationSeconds: quoteData.durationSeconds,
       currency: quoteData.currency,
+      displayCurrency: quoteData.displayCurrency,
+      exchangeRate: quoteData.exchangeRate,
+      displayEstimatedFare: quoteData.displayEstimatedFare,
+      exchangeRateSource: quoteData.exchangeRateSource,
+      exchangeRateCapturedAt: new Date(quoteData.exchangeRateCapturedAt),
       baseFare: quoteData.baseFare,
       distanceFare: quoteData.distanceFare,
       timeFare: quoteData.timeFare,

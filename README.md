@@ -29,6 +29,7 @@ The Angular client lives in the sibling `vehicle-rental-angular` repository.
 - Driver ride rejection with required structured reasons, permanent audit history, passenger/admin visibility, and automatic reassignment that excludes drivers who already rejected the ride
 - Socket.IO ride updates for passengers, drivers, and dispatchers
 - MYR card pre-authorization before dispatch, automatic final-fare capture, automatic waiting charges, driver-entered tolls, promotional discounts, receipts, and Web Push notifications
+- Public multi-currency display metadata for USD, MYR, EUR, GBP, SGD, and AUD, while preserving USD rental and MYR ride settlement
 - Cash rides are settled directly with the assigned driver and recorded as paid only after the driver confirms collection
 - Administrator toll corrections before completion, with waiting derived from arrival/start timestamps and the final fare locked at completion
 - Configurable CORS origin for the Angular frontend
@@ -74,6 +75,14 @@ GOOGLE_CLIENT_SECRET=replace-with-google-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:5000/api/v1/auth/session/callback/google
 GOOGLE_MAPS_SERVER_KEY=replace-with-google-routes-server-key
 RIDES_CURRENCY=MYR
+DEFAULT_DISPLAY_CURRENCY=USD
+CURRENCY_RATES_JSON={"USD":1,"MYR":4.45,"EUR":0.92,"GBP":0.78,"SGD":1.35,"AUD":1.52}
+CURRENCY_RATES_UPDATED_AT=2026-08-13T00:00:00.000Z
+LIVE_CURRENCY_RATES_ENABLED=true
+CURRENCY_RATES_PROVIDER_URL=https://api.frankfurter.dev/v2/rates
+CURRENCY_RATES_TIMEOUT_MS=3000
+CURRENCY_RATES_CACHE_MINUTES=360
+CURRENCY_RATES_FALLBACK_RETRY_MINUTES=5
 STRIPE_SECRET_KEY=sk_test_replace_me
 STRIPE_WEBHOOK_SECRET=whsec_replace_me
 RESEND_API_KEY=re_replace_me
@@ -212,6 +221,7 @@ Support requests persist customer, driver, and administrator messages; may link 
 | Method  | Endpoint                              | Access   | Description                            |
 | ------- | ------------------------------------- | -------- | -------------------------------------- |
 | `GET`   | `/api/v1/rides/options`               | Public   | KL service zone and MYR fare rules     |
+| `GET`   | `/api/v1/currencies`                  | Public   | Supported display currencies and rates |
 | `POST`  | `/api/v1/rides/quote`                 | Customer | Calculate a signed five-minute fare    |
 | `POST`  | `/api/v1/rides`                       | Customer | Request an immediate ride              |
 | `GET`   | `/api/v1/rides`                       | Customer | Current and previous rides             |
@@ -264,6 +274,10 @@ Roadly Rides is intentionally separate from daily vehicle rentals. It supports i
 Stripe Checkout activates only when `STRIPE_SECRET_KEY` is configured. Configure Stripe to send `checkout.session.completed` and `checkout.session.expired` events to `/api/v1/payments/stripe/webhook`. Generate VAPID keys with `npx web-push generate-vapid-keys` to enable opt-in browser notifications. Resend and Twilio notifications activate only when their corresponding environment variables are present.
 
 Card rides use separate authorization and capture. Checkout places a temporary hold for the estimated fare plus the greater of `RIDES_CARD_AUTH_BUFFER_PERCENT` or `RIDES_CARD_AUTH_BUFFER_MINIMUM`. Dispatch starts only after the authorization webhook succeeds. At completion, Roadly captures the exact final fare and Stripe releases the unused hold. Cash rides bypass Stripe and are marked paid only when the assigned driver confirms receipt.
+
+Display conversion rates are loaded server-side from the free Frankfurter reference-rate API and cached in memory. If the provider times out, returns an error, or sends an invalid response, the API returns the configured `CURRENCY_RATES_JSON` values instead. These rates affect presentation only; rentals still settle in USD and rides still settle in MYR.
+
+Each new booking and ride stores an immutable confirmation snapshot containing its transaction currency, selected display currency, applied exchange rate, converted confirmation amount, provider/fallback source, and capture timestamp. Existing records are backfilled as USD rentals or MYR rides at a legacy `1.0` rate. Stripe metadata, API receipts, and booking notifications retain both display and settlement context, so historical confirmations do not change when current FX rates change.
 
 Google sign-in activates when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are configured. Register the exact Better Auth callback (`/api/v1/auth/session/callback/google`) as an authorized redirect URI in Google Cloud. Better Auth stores the session in an HttpOnly cookie; Angular never receives an application token. Customers must verify an international-format phone number before creating a booking, and changing that phone number clears its verification status. In non-production environments without Twilio credentials, the OTP is returned only as `developmentCode` for local testing.
 

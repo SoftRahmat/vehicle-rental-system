@@ -22,6 +22,7 @@ export type RideQuoteRequest = {
   dropoff: Coordinate & { address: string };
   promoCode?: string;
   paymentMethod?: "card" | "cash";
+  displayCurrency?: string;
 };
 
 export type RideQuoteToken = RideQuoteRequest & {
@@ -39,4 +40,9 @@ export type RideQuoteToken = RideQuoteRequest & {
   estimatedFare: number;
   routingProvider: string;
   paymentMethod: "card" | "cash";
+  displayCurrency: string;
+  exchangeRate: number;
+  displayEstimatedFare: number;
+  exchangeRateSource: string;
+  exchangeRateCapturedAt: string;
 };

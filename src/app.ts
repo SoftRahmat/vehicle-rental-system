@@ -16,6 +16,7 @@ import { driverRideRouter, rideRouter } from "./modules/ride/ride.routes";
 import { rideNotificationRouter } from "./modules/ride-notification/ride-notification.routes";
 import { auth } from "./lib/auth";
 import { authRateLimit } from "./middleware/auth-rate-limit";
+import { currencyRouter } from "./modules/currency/currency.routes";
 
 const app = express();
 
@@ -142,6 +143,9 @@ app.get("/", (req, res) => {
 
 // auth router
 app.use("/api/v1/auth", authRouter);
+
+// Public display-currency metadata. Financial settlement currencies are unchanged.
+app.use("/api/v1/currencies", currencyRouter);
 
 // user router
 app.use("/api/v1/users", userRouter);

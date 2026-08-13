@@ -8,6 +8,7 @@ import {
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 import { notificationService } from "../notification/notification.service";
+import { currencyService } from "../currency/currency.service";
 import {
   calculatePricing,
   normalizeRentalSelection,
@@ -21,6 +22,12 @@ type Booking = {
   rent_start_date: string;
   rent_end_date: string;
   total_price: number;
+  transaction_currency: string;
+  display_currency: string;
+  exchange_rate: number;
+  display_total: number;
+  exchange_rate_source: string;
+  exchange_rate_captured_at: Date;
   pickup_location?: string | null;
   return_location?: string | null;
   pickup_time?: string | null;
@@ -78,6 +85,9 @@ const timeValue = (time: string): Date =>
 const decimal = (value: Prisma.Decimal | null): number | null =>
   value == null ? null : Number(value);
 
+const money = (value: number): number =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+
 const toBooking = (record: BookingRecord): Booking => ({
   id: record.id,
   customer_id: record.customerId,
@@ -85,6 +95,12 @@ const toBooking = (record: BookingRecord): Booking => ({
   rent_start_date: dateOnly(record.rentStartDate),
   rent_end_date: dateOnly(record.rentEndDate),
   total_price: Number(record.totalPrice),
+  transaction_currency: record.transactionCurrency,
+  display_currency: record.displayCurrency,
+  exchange_rate: Number(record.exchangeRate),
+  display_total: Number(record.displayTotal),
+  exchange_rate_source: record.exchangeRateSource,
+  exchange_rate_captured_at: record.exchangeRateCapturedAt,
   pickup_location: record.pickupLocation,
   return_location: record.returnLocation,
   pickup_time: timeOnly(record.pickupTime),
@@ -128,6 +144,7 @@ const createBooking = async (
     vehicle_id: number;
     rent_start_date: string;
     rent_end_date: string;
+    display_currency?: string;
   } & RentalSelection,
   actor?: Actor,
 ): Promise<Booking> => {
@@ -168,6 +185,11 @@ const createBooking = async (
   );
   if (days <= 0) throw appError("Invalid date range", 400);
   const selection = normalizeRentalSelection(payload);
+  const currencySnapshot = await currencyService.transactionSnapshot(
+    1,
+    "USD",
+    payload.display_currency,
+  );
   if (
     payload.rent_start_date === payload.rent_end_date &&
     selection.returnTime <= selection.pickupTime
@@ -215,6 +237,12 @@ const createBooking = async (
             rentStartDate: start,
             rentEndDate: end,
             totalPrice: pricing.totalPrice,
+            transactionCurrency: currencySnapshot.transactionCurrency,
+            displayCurrency: currencySnapshot.displayCurrency,
+            exchangeRate: currencySnapshot.exchangeRate,
+            displayTotal: money(pricing.totalPrice * currencySnapshot.exchangeRate),
+            exchangeRateSource: currencySnapshot.exchangeRateSource,
+            exchangeRateCapturedAt: currencySnapshot.exchangeRateCapturedAt,
             status: "active",
             pickupLocation: selection.pickupLocation,
             returnLocation: selection.returnLocation,
@@ -253,6 +281,11 @@ const createBooking = async (
           startDate: payload.rent_start_date,
           endDate: payload.rent_end_date,
           totalPrice: result.pricing.totalPrice,
+          transactionCurrency: currencySnapshot.transactionCurrency,
+          displayTotal: money(
+            result.pricing.totalPrice * currencySnapshot.exchangeRate,
+          ),
+          displayCurrency: currencySnapshot.displayCurrency,
         })
         .catch((error) => console.error("Booking notification failed", error));
     }

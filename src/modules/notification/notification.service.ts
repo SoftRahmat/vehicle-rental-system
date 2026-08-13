@@ -8,6 +8,9 @@ type BookingNotification = {
   startDate: string;
   endDate: string;
   totalPrice: number;
+  transactionCurrency: string;
+  displayTotal: number;
+  displayCurrency: string;
 };
 
 const sendEmail = async (
@@ -25,7 +28,7 @@ const sendEmail = async (
       from: config.emailFrom,
       to: [to],
       subject: `Roadly booking #${booking.bookingId} confirmed`,
-      html: `<h1>Your Roadly reservation is confirmed</h1><p>${booking.vehicleName}</p><p>${booking.startDate} to ${booking.endDate}</p><p>Total: $${booking.totalPrice.toFixed(2)}</p>`,
+      html: `<h1>Your Roadly reservation is confirmed</h1><p>${booking.vehicleName}</p><p>${booking.startDate} to ${booking.endDate}</p><p>Confirmed total: ${booking.displayCurrency} ${booking.displayTotal.toFixed(2)}</p><p>Settlement total: ${booking.transactionCurrency} ${booking.totalPrice.toFixed(2)}</p>`,
     }),
   });
   if (!response.ok)

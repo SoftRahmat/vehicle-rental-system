@@ -25,6 +25,24 @@ const config = {
     "http://localhost:5000/api/v1/auth/session/callback/google",
   nodeEnv: process.env.NODE_ENV ?? "development",
   ridesCurrency: process.env.RIDES_CURRENCY ?? "MYR",
+  defaultDisplayCurrency: process.env.DEFAULT_DISPLAY_CURRENCY ?? "USD",
+  currencyRatesJson: process.env.CURRENCY_RATES_JSON,
+  currencyRatesUpdatedAt:
+    process.env.CURRENCY_RATES_UPDATED_AT ?? "2026-08-13T00:00:00.000Z",
+  liveCurrencyRatesEnabled:
+    (process.env.LIVE_CURRENCY_RATES_ENABLED ?? "true") === "true",
+  currencyRatesProviderUrl:
+    process.env.CURRENCY_RATES_PROVIDER_URL ??
+    "https://api.frankfurter.dev/v2/rates",
+  currencyRatesTimeoutMs: Number(
+    process.env.CURRENCY_RATES_TIMEOUT_MS ?? 3000,
+  ),
+  currencyRatesCacheMinutes: Number(
+    process.env.CURRENCY_RATES_CACHE_MINUTES ?? 360,
+  ),
+  currencyRatesFallbackRetryMinutes: Number(
+    process.env.CURRENCY_RATES_FALLBACK_RETRY_MINUTES ?? 5,
+  ),
   ridesCardAuthorizationBufferPercent: Number(
     process.env.RIDES_CARD_AUTH_BUFFER_PERCENT ?? 25,
   ),
