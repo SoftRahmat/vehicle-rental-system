@@ -1,4 +1,6 @@
 import express from "express";
+import helmet from "helmet";
+import { toNodeHandler } from "better-auth/node";
 import { authRouter } from "./modules/auth/auth.routes";
 import { userRouter } from "./modules/user/user.routes";
 import { vehicleRouter } from "./modules/vehicle/vehicle.routes";
@@ -12,8 +14,41 @@ import { paymentRouter } from "./modules/payment/payment.routes";
 import { supportRouter } from "./modules/support/support.routes";
 import { driverRideRouter, rideRouter } from "./modules/ride/ride.routes";
 import { rideNotificationRouter } from "./modules/ride-notification/ride-notification.routes";
+import { auth } from "./lib/auth";
+import { authRateLimit } from "./middleware/auth-rate-limit";
 
 const app = express();
+
+app.disable("x-powered-by");
+if (config.nodeEnv === "production") app.set("trust proxy", 1);
+
+app.use((req, res, next) => {
+  if (
+    config.nodeEnv === "production" &&
+    req.header("x-forwarded-proto") !== "https" &&
+    !req.secure
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "HTTPS is required",
+    });
+  }
+  return next();
+});
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: "same-site" },
+  }),
+);
 
 // dynamic whitelist pattern (dev + prod)
 const WHITELIST = [
@@ -41,6 +76,17 @@ const corsOptions = {
 
 // Apply CORS to all requests
 app.use(cors(corsOptions));
+
+app.use("/api/v1", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  next();
+});
+
+// Better Auth must receive the untouched request body.
+app.use("/api/v1/auth/session", authRateLimit);
+app.all("/api/v1/auth/session", toNodeHandler(auth));
+app.all("/api/v1/auth/session/*splat", toNodeHandler(auth));
 
 // Stripe requires the untouched request body for webhook signature verification.
 app.post(
@@ -82,7 +128,7 @@ app.use((req, res, next) => {
   return res.status(403).send("CORS: Origin not allowed");
 });
 
-// parser
+// Parser for application routes after the Better Auth handler.
 app.use(express.json());
 
 // 👉 Root route

@@ -1,87 +1,105 @@
-import { Request, Response, NextFunction } from "express";
+import type { IncomingHttpHeaders } from "http";
+import type { NextFunction, Request, Response } from "express";
+import { fromNodeHeaders } from "better-auth/node";
 import jwt from "jsonwebtoken";
 import config from "../config";
-import type { AuthUser } from "../types/express/index.d.ts";
+import { auth } from "../lib/auth";
 import { prisma } from "../lib/prisma";
-
-// verifyJwt stays permissive but we will narrow before attaching
-const verifyJwt = (token: string): any => {
-  try {
-    return jwt.verify(token, config.jwtSecret as string);
-  } catch (err) {
-    throw new Error("Invalid or expired token");
-  }
-};
-
-const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-  const header = req.header("Authorization");
-  if (!header || !header.startsWith("Bearer ")) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
-  }
-
-  const token = header.replace("Bearer ", "").trim();
-
-  let payload: any;
-  try {
-    payload = verifyJwt(token);
-  } catch (err) {
-    return res
-      .status(401)
-      .json({ success: false, message: "Invalid or expired token" });
-  }
-
-  const { id, role, name, email } = payload as {
-    id?: number;
-    role?: string;
-    name?: string;
-    email?: string;
-  };
-
-  if (!id || !role) {
-    return res
-      .status(401)
-      .json({ success: false, message: "Invalid token payload" });
-  }
-
-  // Create an AuthUser and attach it (ensures proper shape)
-  const authUser: AuthUser = {
-    id: Number(id),
-    role:
-      role === "admin" ? "admin" : role === "driver" ? "driver" : "customer",
-  };
-  if (name) authUser.name = String(name);
-  if (email) authUser.email = String(email);
-
-  req.user = authUser;
-
-  return next();
-};
+import type { AuthUser } from "../types/express/index.d.ts";
 
 type Role = "admin" | "customer" | "driver";
 
-const requireRole = (role: Role) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+const normalizeRole = (role: string): Role =>
+  role === "admin" ? "admin" : role === "driver" ? "driver" : "customer";
+
+const loadCurrentUser = async (id: number): Promise<AuthUser | null> => {
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, name: true, email: true, role: true },
+  });
+  if (!user) return null;
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: normalizeRole(user.role),
+  };
+};
+
+const legacyJwtUserId = (authorization?: string): number | null => {
+  if (!authorization?.startsWith("Bearer ")) return null;
+  const token = authorization.slice("Bearer ".length).trim();
+  try {
+    const payload = jwt.verify(token, config.jwtSecret as string, {
+      algorithms: ["HS256"],
+      issuer: "roadly-api",
+      audience: "roadly-web",
+    }) as { id?: number };
+    return Number.isInteger(Number(payload.id)) ? Number(payload.id) : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Resolve identity from the Better Auth cookie first, then from a short-lived
+ * legacy bearer token during migration. Authorization always comes from the
+ * current PostgreSQL user row, never from a cached role claim.
+ */
+export const resolveCurrentAuthUser = async (
+  headers: IncomingHttpHeaders,
+): Promise<AuthUser | null> => {
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders(headers),
+  });
+  const sessionUserId = session?.user?.id
+    ? Number(session.user.id)
+    : legacyJwtUserId(
+        Array.isArray(headers.authorization)
+          ? headers.authorization[0]
+          : headers.authorization,
+      );
+  if (!sessionUserId || !Number.isInteger(sessionUserId)) return null;
+  return loadCurrentUser(sessionUserId);
+};
+
+const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const currentUser = await resolveCurrentAuthUser(req.headers);
+    if (!currentUser) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    req.user = currentUser;
+    return next();
+  } catch {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired authentication session",
+    });
+  }
+};
+
+const requireRole =
+  (role: Role) => (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
-
     if (req.user.role !== role) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
-
     return next();
   };
-};
 
-const requireAnyRole = (roles: Role[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user)
+const requireAnyRole =
+  (roles: Role[]) => (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
-    if (!roles.includes(req.user.role))
+    }
+    if (!roles.includes(req.user.role)) {
       return res.status(403).json({ success: false, message: "Forbidden" });
+    }
     return next();
   };
-};
 
 const requireVerifiedPhone = async (
   req: Request,

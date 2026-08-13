@@ -47,6 +47,15 @@ const providers = asyncHandler(async (_req: Request, res: Response) => {
   });
 });
 
+const me = asyncHandler(async (req: Request, res: Response) => {
+  const user = await authService.getCurrentUser(Number(req.user?.id));
+  res.status(200).json({
+    success: true,
+    message: "Current user retrieved successfully",
+    data: user,
+  });
+});
+
 const startGoogle = asyncHandler(async (_req: Request, res: Response) => {
   res.redirect(authService.googleAuthorizationUrl());
 });
@@ -101,4 +110,5 @@ export const authController = {
   exchangeGoogleCode,
   sendPhoneCode,
   verifyPhoneCode,
+  me,
 };

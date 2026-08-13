@@ -31,10 +31,61 @@ model User {
   assignedDriverIncidents DriverIncident[]        @relation("IncidentAssignee")
   resolvedDriverIncidents DriverIncident[]        @relation("IncidentResolver")
   driverRiskActions       DriverRiskAction[]      @relation("RiskActionAdmin")
+  authSessions            AuthSession[]
+  authAccounts            AuthAccount[]
 
   @@index([createdAt(sort: Desc)], map: "idx_users_created_at")
   @@index([role], map: "idx_users_role")
   @@map("users")
+}
+
+model AuthSession {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int      @map("user_id")
+  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_auth_sessions_user_id")
+  @@index([expiresAt], map: "idx_auth_sessions_expires_at")
+  @@map("auth_sessions")
+}
+
+model AuthAccount {
+  id                    Int       @id @default(autoincrement())
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                Int       @map("user_id")
+  accessToken           String?   @map("access_token") @db.Text
+  refreshToken          String?   @map("refresh_token") @db.Text
+  idToken               String?   @map("id_token") @db.Text
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamp(6)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamp(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId], map: "auth_accounts_provider_account_key")
+  @@index([userId], map: "idx_auth_accounts_user_id")
+  @@map("auth_accounts")
+}
+
+model AuthVerification {
+  id         Int      @id @default(autoincrement())
+  identifier String
+  value      String   @db.Text
+  expiresAt  DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([identifier], map: "idx_auth_verifications_identifier")
+  @@map("auth_verifications")
 }
 
 model AuthExchangeCode {

@@ -7,6 +7,8 @@ const config = {
   database_url: process.env.DATABASE_URL,
   port: process.env.PORT,
   jwtSecret: process.env.JWT_SECRET,
+  betterAuthSecret: process.env.BETTER_AUTH_SECRET ?? process.env.JWT_SECRET,
+  backendUrl: process.env.BACKEND_URL ?? "http://localhost:5000",
   frontendUrl: process.env.FRONTEND_URL,
   stripeSecretKey: process.env.STRIPE_SECRET_KEY,
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
@@ -20,7 +22,7 @@ const config = {
   googleMapsServerKey: process.env.GOOGLE_MAPS_SERVER_KEY,
   googleCallbackUrl:
     process.env.GOOGLE_CALLBACK_URL ??
-    "http://localhost:5000/api/v1/auth/google/callback",
+    "http://localhost:5000/api/v1/auth/session/callback/google",
   nodeEnv: process.env.NODE_ENV ?? "development",
   ridesCurrency: process.env.RIDES_CURRENCY ?? "MYR",
   ridesCardAuthorizationBufferPercent: Number(

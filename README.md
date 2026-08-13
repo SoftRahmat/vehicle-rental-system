@@ -1,13 +1,16 @@
 # Vehicle Rental System API
 
-Express and TypeScript REST API for Roadly, backed by PostgreSQL with JWT authentication and role-based access control.
+Express and TypeScript REST API for Roadly, backed by PostgreSQL with Better Auth cookie sessions and database-authoritative role-based access control.
 
 The Angular client lives in the sibling `vehicle-rental-angular` repository.
 
 ## Features
 
-- Customer registration and sign-in with JWT authentication
-- Google OAuth sign-in with verified-email account linking and one-time code exchange
+- Customer registration and sign-in with revocable, HttpOnly Better Auth sessions
+- Google OAuth sign-in through Better Auth with verified-email account linking
+- Current PostgreSQL role resolution on every protected HTTP and Socket.IO connection
+- Authentication throttling, 12-character password policy, secure response headers, and production HTTPS enforcement
+- Phone verification is automatically revoked whenever the stored phone number changes
 - Twilio phone OTP onboarding required before customer booking creation
 - Customer, administrator, and dedicated driver roles
 - Vehicle creation, editing, deletion, date-range availability, imagery, specifications, location, and rating
@@ -39,7 +42,7 @@ The Angular client lives in the sibling `vehicle-rental-angular` repository.
 - Express 5
 - TypeScript
 - PostgreSQL with Prisma 7, `@prisma/adapter-pg`, and `pg`
-- JSON Web Tokens
+- Better Auth sessions, with short-lived JWT support retained only during migration
 - bcryptjs
 - date-fns
 
@@ -63,10 +66,12 @@ Create a `.env` file in the project root:
 PORT=5000
 DATABASE_URL=postgresql://username:password@localhost:5432/vehicle_rental
 JWT_SECRET=replace-with-a-long-random-secret
+BETTER_AUTH_SECRET=replace-with-a-different-random-secret-of-at-least-32-characters
+BACKEND_URL=http://localhost:5000
 FRONTEND_URL=http://localhost:4200
 GOOGLE_CLIENT_ID=replace-with-google-client-id
 GOOGLE_CLIENT_SECRET=replace-with-google-client-secret
-GOOGLE_CALLBACK_URL=http://localhost:5000/api/v1/auth/google/callback
+GOOGLE_CALLBACK_URL=http://localhost:5000/api/v1/auth/session/callback/google
 GOOGLE_MAPS_SERVER_KEY=replace-with-google-routes-server-key
 RIDES_CURRENCY=MYR
 STRIPE_SECRET_KEY=sk_test_replace_me
@@ -90,6 +95,8 @@ npm run prisma:generate
 npm run db:migrate:deploy
 ```
 
+The Better Auth migration is incremental and preserves the existing `users` table and integer user IDs. `auth_sessions`, `auth_accounts`, and `auth_verifications` use database-generated numeric primary keys so Better Auth's Prisma adapter can safely reference Roadly's integer users. Existing password and Google account links are backfilled by the committed migrations.
+
 Start the development server:
 
 ```bash
@@ -109,21 +116,23 @@ The API is available at `http://localhost:5000/api/v1`.
 | `npm run db:migrate:deploy` | Apply committed migrations without resetting DB   |
 | `npm run db:status`         | Compare migration history with the configured DB  |
 | `npm run db:smoke`          | Read-only Prisma connection and model count check |
+| `npm run test:security`     | Run the role and ownership authorization matrix   |
+| `npm test`                  | Run all backend tests, including security headers |
 
 ## API overview
 
 ### Authentication
 
-| Method | Endpoint                       | Access                   |
-| ------ | ------------------------------ | ------------------------ |
-| `POST` | `/api/v1/auth/signup`          | Public                   |
-| `POST` | `/api/v1/auth/signin`          | Public                   |
-| `GET`  | `/api/v1/auth/providers`       | Public                   |
-| `GET`  | `/api/v1/auth/google`          | Public OAuth start       |
-| `GET`  | `/api/v1/auth/google/callback` | Google callback          |
-| `POST` | `/api/v1/auth/google/exchange` | Public one-time exchange |
-| `POST` | `/api/v1/auth/phone/send-code` | Authenticated            |
-| `POST` | `/api/v1/auth/phone/verify`    | Authenticated            |
+| Method | Endpoint                              | Access        |
+| ------ | ------------------------------------- | ------------- |
+| `POST` | `/api/v1/auth/session/sign-up/email`  | Public        |
+| `POST` | `/api/v1/auth/session/sign-in/email`  | Public        |
+| `POST` | `/api/v1/auth/session/sign-in/social` | Public        |
+| `POST` | `/api/v1/auth/session/sign-out`       | Authenticated |
+| `GET`  | `/api/v1/auth/me`                     | Authenticated |
+| `GET`  | `/api/v1/auth/providers`              | Public        |
+| `POST` | `/api/v1/auth/phone/send-code`        | Authenticated |
+| `POST` | `/api/v1/auth/phone/verify`           | Authenticated |
 
 ### Vehicles
 
@@ -256,13 +265,15 @@ Stripe Checkout activates only when `STRIPE_SECRET_KEY` is configured. Configure
 
 Card rides use separate authorization and capture. Checkout places a temporary hold for the estimated fare plus the greater of `RIDES_CARD_AUTH_BUFFER_PERCENT` or `RIDES_CARD_AUTH_BUFFER_MINIMUM`. Dispatch starts only after the authorization webhook succeeds. At completion, Roadly captures the exact final fare and Stripe releases the unused hold. Cash rides bypass Stripe and are marked paid only when the assigned driver confirms receipt.
 
-Google sign-in activates when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are configured. Register the exact `GOOGLE_CALLBACK_URL` as an authorized redirect URI in Google Cloud. Roadly links verified Google emails, stores Google's stable subject identifier, and redirects Angular with a short-lived one-time exchange code rather than an application token. Customers must verify an international-format phone number before creating a booking. In non-production environments without Twilio credentials, the OTP is returned only as `developmentCode` for local testing.
+Google sign-in activates when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are configured. Register the exact Better Auth callback (`/api/v1/auth/session/callback/google`) as an authorized redirect URI in Google Cloud. Better Auth stores the session in an HttpOnly cookie; Angular never receives an application token. Customers must verify an international-format phone number before creating a booking, and changing that phone number clears its verification status. In non-production environments without Twilio credentials, the OTP is returned only as `developmentCode` for local testing.
 
-Send authenticated requests with:
+Browser clients authenticate with the Roadly HttpOnly session cookie and must send credentials. A 15-minute bearer JWT remains temporarily accepted for legacy clients, but its role claim is ignored in favor of the current database role:
 
 ```http
 Authorization: Bearer <token>
 ```
+
+Better Auth sessions are revocable and stored in PostgreSQL. Every protected HTTP request and Socket.IO connection reloads the current Roadly user and role, so deletion or role demotion takes effect without waiting for a token to expire. Authentication endpoints are rate-limited, API responses use `no-store`, and Helmet supplies CSP and related browser hardening headers.
 
 The fleet endpoint optionally accepts `startDate` and `endDate` in `YYYY-MM-DD` format and returns `available_for_period` plus the next available date. The individual vehicle availability endpoint accepts the same date range and returns inclusive rental days, pricing, and available alternatives. The unavailable-dates endpoint returns active future booking ranges for the reservation calendar.
 
@@ -302,19 +313,28 @@ Roadly uses Prisma throughout its database layer:
 - Fleet availability, unavailable ranges, and alternative recommendations use Prisma TypedSQL so the optimized PostgreSQL behavior remains type-safe and version controlled.
 - The runtime connects through `@prisma/adapter-pg`; services do not create or use a separate legacy `pg` pool.
 - PostgreSQL check constraints and the partial unique Google-subject index remain explicitly preserved in migration SQL.
+- Better Auth uses numeric-ID mode (`generateId: "serial"`) to remain compatible with Roadly's existing integer `users.id`; changing it back to string generation will cause Prisma relation validation errors.
 - Driver rejection analytics are backed by `driver_ride_rejections`, with indexed ride/time and driver/reason/time access paths. This preserves complete rejection history for future operational reporting rather than overwriting a single reason on the ride.
 
 The existing Neon database was introspected and baseline migration `20260810053000_baseline_existing_database` was recorded as already applied. Do not run `prisma migrate reset` against shared or production data. For new schema changes, update the Prisma models, create a named development migration, review its SQL, and commit both schema and migration files.
 
 ## Deployment
 
-The repository contains `vercel.json` for Vercel deployment. Configure `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, and any required platform variables in the deployment environment. Run `npm run db:migrate:deploy` before starting the newly deployed application.
+The repository contains `vercel.json` for Vercel deployment. Configure `DATABASE_URL`, `JWT_SECRET`, `BETTER_AUTH_SECRET`, `BACKEND_URL`, `FRONTEND_URL`, and any required platform variables in the deployment environment. Production rejects non-HTTPS API requests and Better Auth emits secure cookies. Run `npm run db:migrate:deploy` before starting the newly deployed application.
 
 The currently configured production API URL is:
 
 `https://express-project-iota.vercel.app/`
 
+## Authentication troubleshooting
+
+- A `500` from `/api/v1/auth/session/sign-in/email` after migrating an integer-ID database usually means Better Auth is not running in numeric-ID mode. Keep `advanced.database.generateId` set to `"serial"`, apply all committed migrations, and regenerate Prisma Client.
+- After pulling authentication migrations, run `npm run db:migrate:deploy` followed by `npm run prisma:generate`, then restart the backend process.
+- Existing passwords remain valid. The stronger password requirements apply to new registrations and future password changes.
+- For local Google sign-in, the exact authorized redirect URI is `http://localhost:5000/api/v1/auth/session/callback/google`. Do not add a trailing slash or query parameters.
+- Cross-origin browser requests must use credentials and the request origin must match `FRONTEND_URL`.
+
 ## Current limitations
 
-- No automated backend test suite is configured yet
+- Broader controller and service integration coverage is still being expanded beyond the authorization matrix
 - Vehicle images use URLs rather than managed file uploads

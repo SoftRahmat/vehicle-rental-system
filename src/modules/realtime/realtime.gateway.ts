@@ -1,8 +1,8 @@
 import type { Server as HttpServer } from "http";
-import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
 import config from "../../config";
 import { prisma } from "../../lib/prisma";
+import { resolveCurrentAuthUser } from "../../middleware/auth";
 
 let io: Server | null = null;
 
@@ -16,13 +16,10 @@ const initialize = (server: HttpServer) => {
       credentials: true,
     },
   });
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
-      const token = String(socket.handshake.auth?.token || "");
-      const user = jwt.verify(token, config.jwtSecret as string) as {
-        id: number;
-        role: string;
-      };
+      const user = await resolveCurrentAuthUser(socket.request.headers);
+      if (!user) return next(new Error("Unauthorized"));
       socket.data.user = user;
       next();
     } catch {

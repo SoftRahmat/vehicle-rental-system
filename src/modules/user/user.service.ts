@@ -69,14 +69,17 @@ const updateUser = async (
   }
   const existing = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true },
+    select: { id: true, phone: true },
   });
   if (!existing) throw appError("User not found", 404);
 
   const data: Prisma.UserUpdateInput = { updatedAt: new Date() };
   if (payload.name !== undefined) data.name = payload.name;
   if (payload.email !== undefined) data.email = payload.email.toLowerCase();
-  if (payload.phone !== undefined) data.phone = payload.phone;
+  if (payload.phone !== undefined) {
+    data.phone = payload.phone;
+    if (payload.phone !== existing.phone) data.phoneVerifiedAt = null;
+  }
   if (payload.role !== undefined) data.role = payload.role;
 
   try {

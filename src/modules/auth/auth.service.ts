@@ -78,7 +78,12 @@ const signJwtForUser = (user: PublicUser): string =>
   jwt.sign(
     { id: user.id, name: user.name, email: user.email, role: user.role },
     config.jwtSecret as string,
-    { expiresIn: "5d" },
+    {
+      expiresIn: "15m",
+      issuer: "roadly-api",
+      audience: "roadly-web",
+      algorithm: "HS256",
+    },
   );
 
 const sessionForUserId = async (userId: number) => {
@@ -89,6 +94,15 @@ const sessionForUserId = async (userId: number) => {
   if (!record) throw appError("User not found", 404);
   const user = toPublicUser(record);
   return { token: signJwtForUser(user), user };
+};
+
+const getCurrentUser = async (userId: number) => {
+  const record = await prisma.user.findUnique({
+    where: { id: userId },
+    select: userSelect,
+  });
+  if (!record) throw appError("User not found", 404);
+  return toPublicUser(record);
 };
 
 const signup = async (input: {
@@ -105,8 +119,18 @@ const signup = async (input: {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw appError("A valid email address is required", 400);
   }
-  if (!password || password.length < 6) {
-    throw appError("Password must be at least 6 characters", 400);
+  if (
+    !password ||
+    password.length < 12 ||
+    !/[a-z]/.test(password) ||
+    !/[A-Z]/.test(password) ||
+    !/\d/.test(password) ||
+    !/[^A-Za-z0-9]/.test(password)
+  ) {
+    throw appError(
+      "Password must be at least 12 characters and include uppercase, lowercase, number, and symbol",
+      400,
+    );
   }
   if (!phone || !/^\+?[0-9]{8,15}$/.test(phone)) {
     throw appError("A valid phone number is required (8-15 digits)", 400);
@@ -122,16 +146,28 @@ const signup = async (input: {
   });
   if (existing) throw appError("Email already registered", 400);
 
-  const record = await prisma.user.create({
-    data: {
-      name: name.trim(),
-      email: normalizedEmail,
-      phone,
-      role,
-      password: await bcrypt.hash(password, 10),
-      authProvider: "password",
-    },
-    select: userSelect,
+  const passwordHash = await bcrypt.hash(password, 12);
+  const record = await prisma.$transaction(async (transaction) => {
+    const created = await transaction.user.create({
+      data: {
+        name: name.trim(),
+        email: normalizedEmail,
+        phone,
+        role,
+        password: passwordHash,
+        authProvider: "password",
+      },
+      select: userSelect,
+    });
+    await transaction.authAccount.create({
+      data: {
+        accountId: String(created.id),
+        providerId: "credential",
+        userId: created.id,
+        password: passwordHash,
+      },
+    });
+    return created;
   });
   return toPublicUser(record);
 };
@@ -417,4 +453,5 @@ export const authService = {
   exchangeGoogleCode,
   sendPhoneCode,
   verifyPhoneCode,
+  getCurrentUser,
 };
