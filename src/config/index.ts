@@ -10,6 +10,12 @@ const config = {
   betterAuthSecret: process.env.BETTER_AUTH_SECRET ?? process.env.JWT_SECRET,
   backendUrl: process.env.BACKEND_URL ?? "http://localhost:5000",
   frontendUrl: process.env.FRONTEND_URL,
+  mobileTrustedOrigins: (
+    process.env.MOBILE_TRUSTED_ORIGINS ?? "roadly://,roadly-driver://"
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   stripeSecretKey: process.env.STRIPE_SECRET_KEY,
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   resendApiKey: process.env.RESEND_API_KEY,

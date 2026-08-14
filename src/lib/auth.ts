@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { bearer } from "better-auth/plugins";
 import config from "../config";
 import { prisma } from "./prisma";
 
@@ -13,7 +14,10 @@ export const auth = betterAuth({
   baseURL: config.backendUrl,
   basePath: "/api/v1/auth/session",
   secret: config.betterAuthSecret,
-  trustedOrigins: [config.frontendUrl ?? "http://localhost:4200"],
+  trustedOrigins: [
+    config.frontendUrl ?? "http://localhost:4200",
+    ...config.mobileTrustedOrigins,
+  ],
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   user: {
     modelName: "User",
@@ -62,6 +66,10 @@ export const auth = betterAuth({
         },
       }
     : {},
+  // Native apps persist the returned set-auth-token value in the platform
+  // keychain/keystore and send it back as an Authorization bearer token.
+  // Browser clients continue using the existing HttpOnly session cookie.
+  plugins: [bearer({ requireSignature: true })],
   advanced: {
     cookiePrefix: "roadly",
     useSecureCookies: config.nodeEnv === "production",
