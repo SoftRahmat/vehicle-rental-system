@@ -24,6 +24,8 @@ const config = {
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER,
   googleClientId: process.env.GOOGLE_CLIENT_ID,
+  googleAndroidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID,
+  googleIosClientId: process.env.GOOGLE_IOS_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   googleMapsServerKey: process.env.GOOGLE_MAPS_SERVER_KEY,
   googleCallbackUrl:

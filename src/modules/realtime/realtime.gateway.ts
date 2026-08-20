@@ -18,7 +18,15 @@ const initialize = (server: HttpServer) => {
   });
   io.use(async (socket, next) => {
     try {
-      const user = await resolveCurrentAuthUser(socket.request.headers);
+      const handshakeToken =
+        typeof socket.handshake.auth?.token === "string"
+          ? socket.handshake.auth.token.trim()
+          : "";
+      const headers = { ...socket.request.headers };
+      if (!headers.authorization && handshakeToken) {
+        headers.authorization = `Bearer ${handshakeToken}`;
+      }
+      const user = await resolveCurrentAuthUser(headers);
       if (!user) return next(new Error("Unauthorized"));
       socket.data.user = user;
       next();

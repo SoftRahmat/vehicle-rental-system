@@ -70,7 +70,9 @@ JWT_SECRET=replace-with-a-long-random-secret
 BETTER_AUTH_SECRET=replace-with-a-different-random-secret-of-at-least-32-characters
 BACKEND_URL=http://localhost:5000
 FRONTEND_URL=http://localhost:4200
-GOOGLE_CLIENT_ID=replace-with-google-client-id
+GOOGLE_CLIENT_ID=replace-with-google-web-client-id
+GOOGLE_ANDROID_CLIENT_ID=replace-with-google-android-client-id
+GOOGLE_IOS_CLIENT_ID=replace-with-google-ios-client-id
 GOOGLE_CLIENT_SECRET=replace-with-google-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:5000/api/v1/auth/session/callback/google
 GOOGLE_MAPS_SERVER_KEY=replace-with-google-routes-server-key
@@ -279,7 +281,7 @@ Display conversion rates are loaded server-side from the free Frankfurter refere
 
 Each new booking and ride stores an immutable confirmation snapshot containing its transaction currency, selected display currency, applied exchange rate, converted confirmation amount, provider/fallback source, and capture timestamp. Existing records are backfilled as USD rentals or MYR rides at a legacy `1.0` rate. Stripe metadata, API receipts, and booking notifications retain both display and settlement context, so historical confirmations do not change when current FX rates change.
 
-Google sign-in activates when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are configured. Register the exact Better Auth callback (`/api/v1/auth/session/callback/google`) as an authorized redirect URI in Google Cloud. Better Auth stores the session in an HttpOnly cookie; Angular never receives an application token. Customers must verify an international-format phone number before creating a booking, and changing that phone number clears its verification status. In non-production environments without Twilio credentials, the OTP is returned only as `developmentCode` for local testing.
+Google sign-in activates when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are configured. `GOOGLE_CLIENT_ID` is the Web OAuth client and must remain first because it owns the browser callback. Optional `GOOGLE_ANDROID_CLIENT_ID` and `GOOGLE_IOS_CLIENT_ID` values extend the accepted native ID-token audiences. Register the exact Better Auth callback (`/api/v1/auth/session/callback/google`) as an authorized redirect URI in Google Cloud. Better Auth stores browser sessions in an HttpOnly cookie and returns signed Bearer sessions to native clients; neither client receives the Google secret. Customers must verify an international-format phone number before creating a booking, and changing that phone number clears its verification status. In non-production environments without Twilio credentials, the OTP is returned only as `developmentCode` for local testing.
 
 Browser clients authenticate with the Roadly HttpOnly session cookie and must send credentials. A 15-minute bearer JWT remains temporarily accepted for legacy clients, but its role claim is ignored in favor of the current database role:
 

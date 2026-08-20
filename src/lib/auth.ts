@@ -5,8 +5,13 @@ import { bearer } from "better-auth/plugins";
 import config from "../config";
 import { prisma } from "./prisma";
 
+const googleClientIds = [
+  config.googleClientId,
+  config.googleAndroidClientId,
+  config.googleIosClientId,
+].filter((clientId): clientId is string => Boolean(clientId));
 const googleConfigured = Boolean(
-  config.googleClientId && config.googleClientSecret,
+  googleClientIds.length > 0 && config.googleClientSecret,
 );
 
 export const auth = betterAuth({
@@ -61,7 +66,9 @@ export const auth = betterAuth({
   socialProviders: googleConfigured
     ? {
         google: {
-          clientId: config.googleClientId as string,
+          // Keep the Web client first: it owns the browser callback while all
+          // configured platform audiences remain valid for native ID tokens.
+          clientId: googleClientIds,
           clientSecret: config.googleClientSecret as string,
         },
       }
@@ -88,6 +95,7 @@ export const auth = betterAuth({
     max: 20,
     customRules: {
       "/sign-in/email": { window: 60, max: 8 },
+      "/sign-in/social": { window: 60, max: 8 },
       "/sign-up/email": { window: 60, max: 5 },
     },
   },
