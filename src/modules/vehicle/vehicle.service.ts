@@ -17,6 +17,7 @@ import {
   type PricingBreakdown,
   type RentalSelection,
 } from "../booking/pricing";
+import { currencyService } from "../currency/currency.service";
 
 const ALLOWED_VEHICLE_TYPES = ["car", "bike", "van", "SUV"] as const;
 type VehicleType = (typeof ALLOWED_VEHICLE_TYPES)[number];
@@ -39,6 +40,10 @@ export type Vehicle = {
   next_available_date?: string | null;
   created_at?: Date | null;
   updated_at?: Date | null;
+  transaction_currency?: string;
+  display_currency?: string;
+  display_daily_rent_price?: number;
+  exchange_rate?: number;
 };
 
 const vehicleSelect = {
@@ -178,6 +183,29 @@ export type VehicleAvailabilityQuote = {
   alternatives: Vehicle[];
   pricing: PricingBreakdown;
   selection: NormalizedRentalSelection;
+  transactionCurrency: string;
+  displayCurrency: string;
+  exchangeRate: number;
+  displayDailyRate: number;
+  displayTotalPrice: number;
+  displayPricing: PricingBreakdown;
+};
+
+const convertedPricing = (
+  pricing: PricingBreakdown,
+  exchangeRate: number,
+): PricingBreakdown => {
+  const convert = (amount: number): number =>
+    Math.round((amount * exchangeRate + Number.EPSILON) * 100) / 100;
+  return {
+    basePrice: convert(pricing.basePrice),
+    insuranceFee: convert(pricing.insuranceFee),
+    addOnsFee: convert(pricing.addOnsFee),
+    discountAmount: convert(pricing.discountAmount),
+    taxAmount: convert(pricing.taxAmount),
+    depositAmount: convert(pricing.depositAmount),
+    totalPrice: convert(pricing.totalPrice),
+  };
 };
 
 export type VehicleUnavailableRange = { startDate: string; endDate: string };
@@ -198,6 +226,7 @@ const getAvailabilityQuote = async (
   startDate: string,
   endDate: string,
   rentalSelection: RentalSelection = {},
+  displayCurrency?: string,
 ): Promise<VehicleAvailabilityQuote> => {
   if (!Number.isInteger(vehicleId) || vehicleId <= 0)
     throw appError("Invalid vehicle id", 400);
@@ -234,6 +263,11 @@ const getAvailabilityQuote = async (
     );
   }
   const pricing = calculatePricing(dailyRate, days, selection);
+  const currencySnapshot = await currencyService.transactionSnapshot(
+    pricing.totalPrice,
+    "USD",
+    displayCurrency,
+  );
   const alternativeRows = await prisma.$queryRawTyped(
     getAvailableAlternatives(vehicleId, start, end, dailyRate),
   );
@@ -243,9 +277,32 @@ const getAvailabilityQuote = async (
     days,
     dailyRate,
     totalPrice: pricing.totalPrice,
-    alternatives: alternativeRows.map(rowToVehicle),
+    alternatives: alternativeRows.map((row) => {
+      const alternative = rowToVehicle(row);
+      return {
+        ...alternative,
+        transaction_currency: "USD",
+        display_currency: currencySnapshot.displayCurrency,
+        display_daily_rent_price:
+          Math.round(
+            (alternative.daily_rent_price * currencySnapshot.exchangeRate +
+              Number.EPSILON) *
+              100,
+          ) / 100,
+        exchange_rate: currencySnapshot.exchangeRate,
+      };
+    }),
     pricing,
     selection,
+    transactionCurrency: "USD",
+    displayCurrency: currencySnapshot.displayCurrency,
+    exchangeRate: currencySnapshot.exchangeRate,
+    displayDailyRate:
+      Math.round(
+        (dailyRate * currencySnapshot.exchangeRate + Number.EPSILON) * 100,
+      ) / 100,
+    displayTotalPrice: currencySnapshot.displayAmount,
+    displayPricing: convertedPricing(pricing, currencySnapshot.exchangeRate),
   };
 };
 
@@ -337,6 +394,7 @@ const getVehicleCatalog = async (query: Record<string, unknown>) => {
   const sort = stringValue(query.sort) || "recommended";
   const startDate = stringValue(query.startDate) || undefined;
   const endDate = stringValue(query.endDate) || undefined;
+  const displayCurrency = stringValue(query.displayCurrency) || undefined;
   const isAvailable = (vehicle: Vehicle): boolean =>
     vehicle.available_for_period ?? vehicle.availability_status === "available";
 
@@ -371,8 +429,25 @@ const getVehicleCatalog = async (query: Record<string, unknown>) => {
   const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
   const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages);
   const offset = (safePage - 1) * pageSize;
+  const currencySnapshot = await currencyService.transactionSnapshot(
+    1,
+    "USD",
+    displayCurrency,
+  );
+  const items = matching.slice(offset, offset + pageSize).map((vehicle) => ({
+    ...vehicle,
+    transaction_currency: "USD",
+    display_currency: currencySnapshot.displayCurrency,
+    display_daily_rent_price:
+      Math.round(
+        (vehicle.daily_rent_price * currencySnapshot.exchangeRate +
+          Number.EPSILON) *
+          100,
+      ) / 100,
+    exchange_rate: currencySnapshot.exchangeRate,
+  }));
   return {
-    items: matching.slice(offset, offset + pageSize),
+    items,
     page: safePage,
     pageSize,
     total,

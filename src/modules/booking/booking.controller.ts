@@ -3,12 +3,38 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { bookingService } from "./booking.service";
 import type { AuthUser } from "../../types/express/index";
 import { rentalOptions } from "./pricing";
+import { currencyService } from "../currency/currency.service";
 
-const getRentalOptions = asyncHandler(async (_req: Request, res: Response) => {
+const getRentalOptions = asyncHandler(async (req: Request, res: Response) => {
+  const displayCurrency =
+    typeof req.query.displayCurrency === "string"
+      ? req.query.displayCurrency
+      : undefined;
+  const snapshot = await currencyService.transactionSnapshot(
+    1,
+    "USD",
+    displayCurrency,
+  );
+  const convert = (amount: number): number =>
+    Math.round((amount * snapshot.exchangeRate + Number.EPSILON) * 100) / 100;
   res.status(200).json({
     success: true,
     message: "Rental options retrieved successfully",
-    data: rentalOptions,
+    data: {
+      ...rentalOptions,
+      transactionCurrency: "USD",
+      displayCurrency: snapshot.displayCurrency,
+      exchangeRate: snapshot.exchangeRate,
+      insurancePlans: rentalOptions.insurancePlans.map((option) => ({
+        ...option,
+        displayDailyRate: convert(option.dailyRate),
+      })),
+      addOns: rentalOptions.addOns.map((option) => ({
+        ...option,
+        displayDailyRate: convert(option.dailyRate),
+      })),
+      displaySecurityDeposit: convert(rentalOptions.securityDeposit),
+    },
   });
 });
 

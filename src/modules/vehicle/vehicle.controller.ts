@@ -95,6 +95,9 @@ const getAvailabilityQuote = asyncHandler(
             ? req.query.promoCode
             : undefined,
       },
+      typeof req.query.displayCurrency === "string"
+        ? req.query.displayCurrency
+        : undefined,
     );
 
     res.status(200).json({

@@ -291,7 +291,16 @@ Authorization: Bearer <token>
 
 Better Auth sessions are revocable and stored in PostgreSQL. Every protected HTTP request and Socket.IO connection reloads the current Roadly user and role, so deletion or role demotion takes effect without waiting for a token to expire. Authentication endpoints are rate-limited, API responses use `no-store`, and Helmet supplies CSP and related browser hardening headers.
 
-The fleet endpoint optionally accepts `startDate` and `endDate` in `YYYY-MM-DD` format and returns `available_for_period` plus the next available date. The individual vehicle availability endpoint accepts the same date range and returns inclusive rental days, pricing, and available alternatives. The unavailable-dates endpoint returns active future booking ranges for the reservation calendar.
+The fleet catalog optionally accepts `startDate`, `endDate`, and
+`displayCurrency`. It returns `available_for_period`, the next available date,
+the immutable USD daily rate, and a converted display-rate snapshot. The
+individual vehicle availability endpoint accepts the same display currency and
+returns inclusive rental days, transaction pricing, converted display pricing,
+and available alternatives. Rental options also expose converted insurance and
+add-on display rates. Conversion uses the live provider with configured
+fallbacks; booking settlement and persisted totals remain USD. The
+unavailable-dates endpoint returns active future booking ranges for the
+reservation calendar.
 
 ## Project structure
 
