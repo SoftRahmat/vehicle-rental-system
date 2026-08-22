@@ -7,6 +7,9 @@ import { realtimeGateway } from "../realtime/realtime.gateway";
 import { driverEarningService } from "../driver-earning/driver-earning.service";
 
 type Actor = { id: number; role: "admin" | "customer" | "driver" };
+type CheckoutReturnTarget = "web" | "mobile";
+type PaymentResourceKind = "booking" | "ride";
+type PaymentReturnStatus = "success" | "cancelled";
 
 const stripe = config.stripeSecretKey
   ? new Stripe(config.stripeSecretKey)
@@ -24,7 +27,74 @@ const integrationStatus = () => ({
   ),
 });
 
-const createCheckoutSession = async (bookingId: number, actor: Actor) => {
+const mobileReturnUrl = (
+  kind: PaymentResourceKind,
+  status: PaymentReturnStatus,
+  resourceId: number,
+  includeStripeSession = false,
+) => {
+  const configured = config.mobilePaymentReturnUrl;
+  const url = new URL(configured);
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("MOBILE_PAYMENT_RETURN_URL must use HTTP or HTTPS");
+  }
+  url.searchParams.set("kind", kind);
+  url.searchParams.set("status", status);
+  url.searchParams.set("id", String(resourceId));
+  const value = url.toString();
+  return includeStripeSession
+    ? `${value}${value.includes("?") ? "&" : "?"}session_id={CHECKOUT_SESSION_ID}`
+    : value;
+};
+
+const mobileAppRedirectUrl = (input: {
+  kind?: unknown;
+  status?: unknown;
+  id?: unknown;
+}) => {
+  const kind =
+    input.kind === "booking" || input.kind === "ride" ? input.kind : null;
+  const status =
+    input.status === "success" || input.status === "cancelled"
+      ? input.status
+      : null;
+  const resourceId = Number(input.id);
+  if (!kind || !status || !Number.isInteger(resourceId) || resourceId <= 0) {
+    const error: any = new Error("Invalid mobile payment return");
+    error.status = 400;
+    throw error;
+  }
+  return `roadly://payment/${kind}/${status}?id=${resourceId}`;
+};
+
+const checkoutReturnUrls = (
+  target: CheckoutReturnTarget,
+  kind: PaymentResourceKind,
+  resourceId: number,
+) => {
+  if (target === "mobile") {
+    return {
+      success: mobileReturnUrl(kind, "success", resourceId, true),
+      cancelled: mobileReturnUrl(kind, "cancelled", resourceId),
+    };
+  }
+  const frontendUrl = config.frontendUrl || "http://localhost:4200";
+  return kind === "booking"
+    ? {
+        success: `${frontendUrl}/bookings?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancelled: `${frontendUrl}/bookings?payment=cancelled`,
+      }
+    : {
+        success: `${frontendUrl}/rides?authorization=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancelled: `${frontendUrl}/rides?authorization=cancelled`,
+      };
+};
+
+const createCheckoutSession = async (
+  bookingId: number,
+  actor: Actor,
+  returnTarget: CheckoutReturnTarget = "web",
+) => {
   if (!stripe) {
     const error: any = new Error(
       "Stripe payments are not configured. Add STRIPE_SECRET_KEY to the backend environment.",
@@ -66,7 +136,7 @@ const createCheckoutSession = async (bookingId: number, actor: Actor) => {
     throw error;
   }
 
-  const frontendUrl = config.frontendUrl || "http://localhost:4200";
+  const returnUrls = checkoutReturnUrls(returnTarget, "booking", booking.id);
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     customer_email: booking.customer.email,
@@ -90,8 +160,8 @@ const createCheckoutSession = async (bookingId: number, actor: Actor) => {
       exchangeRate: String(booking.exchangeRate),
       displayTotal: String(booking.displayTotal),
     },
-    success_url: `${frontendUrl}/bookings?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${frontendUrl}/bookings?payment=cancelled`,
+    success_url: returnUrls.success,
+    cancel_url: returnUrls.cancelled,
   });
 
   await prisma.booking.update({
@@ -106,7 +176,11 @@ const createCheckoutSession = async (bookingId: number, actor: Actor) => {
   return { sessionId: session.id, url: session.url };
 };
 
-const createRideCheckoutSession = async (rideId: number, actor: Actor) => {
+const createRideCheckoutSession = async (
+  rideId: number,
+  actor: Actor,
+  returnTarget: CheckoutReturnTarget = "web",
+) => {
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
     include: { passenger: { select: { email: true } } },
@@ -180,7 +254,7 @@ const createRideCheckoutSession = async (rideId: number, actor: Actor) => {
     error.status = 400;
     throw error;
   }
-  const frontendUrl = config.frontendUrl || "http://localhost:4200";
+  const returnUrls = checkoutReturnUrls(returnTarget, "ride", ride.id);
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     customer_email: ride.passenger.email,
@@ -214,8 +288,8 @@ const createRideCheckoutSession = async (rideId: number, actor: Actor) => {
         displayCurrency: ride.displayCurrency,
       },
     },
-    success_url: `${frontendUrl}/rides?authorization=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${frontendUrl}/rides?authorization=cancelled`,
+    success_url: returnUrls.success,
+    cancel_url: returnUrls.cancelled,
   });
   await prisma.$transaction([
     prisma.ridePayment.create({
@@ -475,6 +549,7 @@ export const paymentService = {
   integrationStatus,
   createCheckoutSession,
   createRideCheckoutSession,
+  mobileAppRedirectUrl,
   captureAuthorizedRidePayment,
   settleCancelledRidePayment,
   handleWebhook,

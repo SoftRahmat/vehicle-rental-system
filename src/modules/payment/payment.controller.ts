@@ -3,6 +3,14 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import type { AuthUser } from "../../types/express/index";
 import { paymentService } from "./payment.service";
 
+const returnTarget = (value: unknown): "web" | "mobile" => {
+  if (value == null || value === "web") return "web";
+  if (value === "mobile") return "mobile";
+  const error: any = new Error("returnTarget must be web or mobile");
+  error.status = 400;
+  throw error;
+};
+
 const getIntegrationStatus = asyncHandler(
   async (_req: Request, res: Response) => {
     res.status(200).json({
@@ -19,6 +27,7 @@ const createCheckoutSession = asyncHandler(
     const result = await paymentService.createCheckoutSession(
       Number(req.params["bookingId"]),
       actor,
+      returnTarget(req.body?.returnTarget),
     );
     res.status(201).json({
       success: true,
@@ -49,20 +58,25 @@ const createRideCheckoutSession = asyncHandler(
     const result = await paymentService.createRideCheckoutSession(
       Number(req.params["rideId"]),
       req.user as AuthUser,
+      returnTarget(req.body?.returnTarget),
     );
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: "MYR ride checkout created",
-        data: result,
-      });
+    res.status(201).json({
+      success: true,
+      message: "MYR ride checkout created",
+      data: result,
+    });
   },
 );
+
+const mobileReturn = asyncHandler(async (req: Request, res: Response) => {
+  const destination = paymentService.mobileAppRedirectUrl(req.query);
+  return res.redirect(303, destination);
+});
 
 export const paymentController = {
   getIntegrationStatus,
   createCheckoutSession,
   stripeWebhook,
   createRideCheckoutSession,
+  mobileReturn,
 };

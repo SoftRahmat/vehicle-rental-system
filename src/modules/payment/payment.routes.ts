@@ -5,6 +5,7 @@ import { paymentController } from "./payment.controller";
 export const paymentRouter = Router();
 
 paymentRouter.get("/status", paymentController.getIntegrationStatus);
+paymentRouter.get("/mobile-return", paymentController.mobileReturn);
 paymentRouter.post(
   "/bookings/:bookingId/checkout",
   authGate.requireAuth,

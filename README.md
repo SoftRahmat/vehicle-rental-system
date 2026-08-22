@@ -70,6 +70,7 @@ JWT_SECRET=replace-with-a-long-random-secret
 BETTER_AUTH_SECRET=replace-with-a-different-random-secret-of-at-least-32-characters
 BACKEND_URL=http://localhost:5000
 FRONTEND_URL=http://localhost:4200
+MOBILE_PAYMENT_RETURN_URL=http://localhost:5000/api/v1/payments/mobile-return
 GOOGLE_CLIENT_ID=replace-with-google-web-client-id
 GOOGLE_ANDROID_CLIENT_ID=replace-with-google-android-client-id
 GOOGLE_IOS_CLIENT_ID=replace-with-google-ios-client-id
@@ -274,6 +275,20 @@ After rejection, the ride returns to `requested` and Roadly immediately attempts
 Roadly Rides is intentionally separate from daily vehicle rentals. It supports immediate bookings, nearest-driver matching, driver live location, and manual dispatch fallback in a 35 km Kuala Lumpur service radius. Configure `GOOGLE_MAPS_SERVER_KEY` with a key restricted to Google Routes API. Development falls back to a clearly identified local route estimate when the key is absent; production does not.
 
 Stripe Checkout activates only when `STRIPE_SECRET_KEY` is configured. Configure Stripe to send `checkout.session.completed` and `checkout.session.expired` events to `/api/v1/payments/stripe/webhook`. Generate VAPID keys with `npx web-push generate-vapid-keys` to enable opt-in browser notifications. Resend and Twilio notifications activate only when their corresponding environment variables are present.
+
+Angular checkout calls retain the existing `FRONTEND_URL` success and cancel
+destinations. Native clients explicitly send `returnTarget: "mobile"`; those
+sessions return through `MOBILE_PAYMENT_RETURN_URL`, which validates the
+booking/ride return shape and redirects to the registered
+`roadly://payment/...` application scheme. The redirect never forwards the
+Stripe session identifier. The app reloads authenticated server state and
+Stripe webhooks remain the only authority for paid or authorized status.
+
+For an Android emulator, use
+`http://10.0.2.2:5000/api/v1/payments/mobile-return`. A physical device needs a
+reachable LAN address for local testing. Production must use an HTTPS endpoint
+on the deployed backend and should migrate the bridge to verified Android App
+Links and iOS Universal Links before store release.
 
 Card rides use separate authorization and capture. Checkout places a temporary hold for the estimated fare plus the greater of `RIDES_CARD_AUTH_BUFFER_PERCENT` or `RIDES_CARD_AUTH_BUFFER_MINIMUM`. Dispatch starts only after the authorization webhook succeeds. At completion, Roadly captures the exact final fare and Stripe releases the unused hold. Cash rides bypass Stripe and are marked paid only when the assigned driver confirms receipt.
 

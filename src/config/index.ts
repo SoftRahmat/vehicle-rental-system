@@ -10,6 +10,9 @@ const config = {
   betterAuthSecret: process.env.BETTER_AUTH_SECRET ?? process.env.JWT_SECRET,
   backendUrl: process.env.BACKEND_URL ?? "http://localhost:5000",
   frontendUrl: process.env.FRONTEND_URL,
+  mobilePaymentReturnUrl:
+    process.env.MOBILE_PAYMENT_RETURN_URL ??
+    `${process.env.BACKEND_URL ?? "http://localhost:5000"}/api/v1/payments/mobile-return`,
   mobileTrustedOrigins: (
     process.env.MOBILE_TRUSTED_ORIGINS ?? "roadly://,roadly-driver://"
   )
@@ -42,9 +45,7 @@ const config = {
   currencyRatesProviderUrl:
     process.env.CURRENCY_RATES_PROVIDER_URL ??
     "https://api.frankfurter.dev/v2/rates",
-  currencyRatesTimeoutMs: Number(
-    process.env.CURRENCY_RATES_TIMEOUT_MS ?? 3000,
-  ),
+  currencyRatesTimeoutMs: Number(process.env.CURRENCY_RATES_TIMEOUT_MS ?? 3000),
   currencyRatesCacheMinutes: Number(
     process.env.CURRENCY_RATES_CACHE_MINUTES ?? 360,
   ),
