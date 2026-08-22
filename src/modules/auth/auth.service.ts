@@ -177,12 +177,17 @@ const signin = async (input: { email: string; password: string }) => {
     throw appError("Missing email or password", 400);
   const record = await prisma.user.findUnique({
     where: { email: input.email.toLowerCase() },
-    select: { ...userSelect, password: true },
+    select: {
+      ...userSelect,
+      authAccounts: {
+        where: { providerId: "credential" },
+        select: { password: true },
+        take: 1,
+      },
+    },
   });
-  if (
-    !record?.password ||
-    !(await bcrypt.compare(input.password, record.password))
-  ) {
+  const passwordHash = record?.authAccounts[0]?.password;
+  if (!passwordHash || !(await bcrypt.compare(input.password, passwordHash))) {
     throw appError("Invalid email or password", 401);
   }
   const user = toPublicUser(record);

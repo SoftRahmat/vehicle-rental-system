@@ -374,6 +374,12 @@ The currently configured production API URL is:
 - For local Google sign-in, the exact authorized redirect URI is `http://localhost:5000/api/v1/auth/session/callback/google`. Do not add a trailing slash or query parameters.
 - Cross-origin browser requests must use credentials and the request origin must match `FRONTEND_URL`.
 
+## Password recovery
+
+Roadly uses Better Auth's `/api/v1/auth/session/request-password-reset` and `/api/v1/auth/session/reset-password` endpoints. Reset links are single use, expire after 15 minutes by default, and revoke every existing session after a successful password change. Responses do not reveal whether an email address belongs to an account.
+
+Configure `RESEND_API_KEY` and `EMAIL_FROM` in production. `PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS` can change the expiry. In local development only, when Resend is not configured, the generated link is printed to the backend terminal for testing. Angular uses `http://localhost:4200/reset-password`; the customer and driver apps use their registered `roadly://auth/reset-password` and `roadly-driver://auth/reset-password` schemes.
+
 ## Current limitations
 
 - Broader controller and service integration coverage is still being expanded beyond the authorization matrix

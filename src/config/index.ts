@@ -23,6 +23,9 @@ const config = {
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   resendApiKey: process.env.RESEND_API_KEY,
   emailFrom: process.env.EMAIL_FROM,
+  passwordResetTokenExpiresInSeconds: Number(
+    process.env.PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS ?? 900,
+  ),
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER,
